@@ -28,9 +28,19 @@
 │   └── Src/            # 源文件
 ├── Drivers/            # STM32 HAL 驱动
 ├── MDK-ARM/            # Keil 工程文件
-├── Lib/                # FOC 库代码（待创建）
-│   ├── Inc/            # 库头文件
-│   └── Src/            # 库源文件
+├── Lib/                # FOC 库代码
+│   ├── Inc/
+│   │   ├── pid.h           # PID 控制器
+│   │   ├── foc_math.h      # FOC 数学函数 (Clarke/Park/InvPark)
+│   │   ├── svpwm.h         # SVPWM 空间矢量调制
+│   │   ├── open_loop_vf.h  # 开环 V/F 控制
+│   │   └── foc_hw_pwm.h    # PWM 硬件接口层
+│   └── Src/
+│       ├── pid.c
+│       ├── foc_math.c
+│       ├── svpwm.c
+│       ├── open_loop_vf.c
+│       └── foc_hw_pwm.c
 ├── Docs/               # 文档
 └── README.md           # 本文件
 ```
@@ -39,29 +49,37 @@
 
 ### Phase 1: PWM 硬件接口
 - [x] PWM 硬件接口调研
+- [x] PWM 硬件接口层实现 (foc_hw_pwm)
 - [ ] TIM1 初始化配置（中心对齐、6路互补输出）
 - [ ] 死区配置
 - [ ] SD 引脚控制（PG10）
 - [ ] PWM 输出验证
 
 ### Phase 2: SVPWM 算法
-- [ ] SVPWM 基础算法实现
-- [ ] 扇区判断与切换
-- [ ] 占空比计算
-- [ ] 输出限幅与保护
+- [x] SVPWM 基础算法实现（7段式，扇区查表）
+- [x] 扇区判断与切换
+- [x] 占空比计算
+- [x] 过调制限幅
 
-### Phase 3: V/F 控制
-- [ ] V/F 曲线设计
-- [ ] 频率/电压发生器
-- [ ] 软启动/停止
+### Phase 3: FOC 数学与控制
+- [x] Clarke/Park/InvPark 坐标变换
+- [x] 角度归一化
+- [x] 电压矢量限幅
+- [x] PID 控制器（anti-windup）
 
-### Phase 4: 电流采样与保护
+### Phase 4: V/F 控制
+- [x] V/F 曲线设计
+- [x] 频率爬坡（加减速）
+- [x] 电压限幅
+- [x] 电角度累加
+
+### Phase 5: 电流采样与保护
 - [ ] ADC 配置（三相电流 + 母线电压）
 - [ ] 电流计算与校准
 - [ ] 过流/过压/欠压保护
 - [ ] 堵转保护
 
-### Phase 5: 系统集成
+### Phase 6: 系统集成
 - [ ] Hall/Encoder 接口
 - [ ] UART 调试接口
 - [ ] 完整控制流程
@@ -93,6 +111,7 @@
 | 日期 | 版本 | 修改内容 |
 |---|---|---|
 | 2026-06-27 | v0.1.0 | 初始版本，完成项目框架和 PWM 硬件接口调研 |
+| 2026-06-27 | v0.2.0 | 迁移 FOC 库代码：SVPWM、坐标变换、PID、V/F 控制 |
 
 ## 许可证
 
