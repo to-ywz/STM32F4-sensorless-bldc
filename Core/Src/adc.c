@@ -62,7 +62,7 @@ void MX_ADC1_Init(void)
 
   /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
   */
-  sConfig.Channel = ADC_CHANNEL_0;
+  sConfig.Channel = ADC_CHANNEL_3;
   sConfig.Rank = 1;
   sConfig.SamplingTime = ADC_SAMPLETIME_15CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
@@ -72,7 +72,7 @@ void MX_ADC1_Init(void)
 
   /** Configures for the selected ADC injected channel its corresponding rank in the sequencer and its sample time
   */
-  sConfigInjected.InjectedChannel = ADC_CHANNEL_0;
+  sConfigInjected.InjectedChannel = ADC_CHANNEL_3;
   sConfigInjected.InjectedRank = 1;
   sConfigInjected.InjectedNbrOfConversion = 3;
   sConfigInjected.InjectedSamplingTime = ADC_SAMPLETIME_15CYCLES;
@@ -88,7 +88,7 @@ void MX_ADC1_Init(void)
 
   /** Configures for the selected ADC injected channel its corresponding rank in the sequencer and its sample time
   */
-  sConfigInjected.InjectedChannel = ADC_CHANNEL_1;
+  sConfigInjected.InjectedChannel = ADC_CHANNEL_4;
   sConfigInjected.InjectedRank = 2;
   if (HAL_ADCEx_InjectedConfigChannel(&hadc1, &sConfigInjected) != HAL_OK)
   {
@@ -97,7 +97,7 @@ void MX_ADC1_Init(void)
 
   /** Configures for the selected ADC injected channel its corresponding rank in the sequencer and its sample time
   */
-  sConfigInjected.InjectedChannel = ADC_CHANNEL_2;
+  sConfigInjected.InjectedChannel = ADC_CHANNEL_6;
   sConfigInjected.InjectedRank = 3;
   if (HAL_ADCEx_InjectedConfigChannel(&hadc1, &sConfigInjected) != HAL_OK)
   {
@@ -123,11 +123,11 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef* adcHandle)
 
     __HAL_RCC_GPIOA_CLK_ENABLE();
     /**ADC1 GPIO Configuration
-    PA0-WKUP     ------> ADC1_IN0
-    PA1     ------> ADC1_IN1
-    PA2     ------> ADC1_IN2
+    PA3     ------> ADC1_IN3
+    PA4     ------> ADC1_IN4
+    PA6     ------> ADC1_IN6
     */
-    GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2;
+    GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_6;
     GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
@@ -153,11 +153,11 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* adcHandle)
     __HAL_RCC_ADC1_CLK_DISABLE();
 
     /**ADC1 GPIO Configuration
-    PA0-WKUP     ------> ADC1_IN0
-    PA1     ------> ADC1_IN1
-    PA2     ------> ADC1_IN2
+    PA3     ------> ADC1_IN3
+    PA4     ------> ADC1_IN4
+    PA6     ------> ADC1_IN6
     */
-    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2);
+    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_6);
 
     /* ADC1 interrupt Deinit */
     HAL_NVIC_DisableIRQ(ADC_IRQn);
