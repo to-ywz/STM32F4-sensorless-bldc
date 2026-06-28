@@ -8,9 +8,9 @@
 #include "foc_hw_pwm.h"
 #include "main.h"
 
-/* SD 引脚定义 (PG10) */
-#define SD_GPIO_PORT    GPIOG
-#define SD_GPIO_PIN     GPIO_PIN_10
+/* SD 引脚定义，使用 CubeMX 生成的宏 */
+#define SD_GPIO_PORT    DRIVER_SD_GPIO_Port
+#define SD_GPIO_PIN     DRIVER_SD_Pin
 
 /* 定时器时钟频率 (假设 168MHz, 需要根据实际配置调整) */
 #define TIM1_CLK_MHZ    168
@@ -130,6 +130,9 @@ void hw_pwm_enable(hw_pwm_instance_t *pwm)
     HAL_TIMEx_PWMN_Start(pwm->config.htim, TIM_CHANNEL_2);
     HAL_TIMEx_PWMN_Start(pwm->config.htim, TIM_CHANNEL_3);
 
+    /* 使能 CH4，用于触发 ADC 注入转换 */
+    HAL_TIM_PWM_Start(pwm->config.htim, TIM_CHANNEL_4);
+
     /* 使能驱动器 (SD = 高) */
     HAL_GPIO_WritePin(SD_GPIO_PORT, SD_GPIO_PIN, GPIO_PIN_SET);
 
@@ -156,6 +159,9 @@ void hw_pwm_disable(hw_pwm_instance_t *pwm)
     HAL_TIMEx_PWMN_Stop(pwm->config.htim, TIM_CHANNEL_1);
     HAL_TIMEx_PWMN_Stop(pwm->config.htim, TIM_CHANNEL_2);
     HAL_TIMEx_PWMN_Stop(pwm->config.htim, TIM_CHANNEL_3);
+
+    /* 禁用 CH4，停止触发 ADC */
+    HAL_TIM_PWM_Stop(pwm->config.htim, TIM_CHANNEL_4);
 
     pwm->enabled = 0;
 }

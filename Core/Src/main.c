@@ -19,12 +19,18 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
+#include "dma.h"
 #include "tim.h"
+#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "open_loop_vf.h"
+#include "svpwm.h"
+#include "foc_math.h"
+#include "foc_hw_pwm.h"
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -34,7 +40,16 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define VDC             12.0f       /* 母线电压 (V) */
+#define PWM_FREQ        16000       /* PWM 频率 (Hz) */
+#define PWM_PERIOD      5249        /* TIM1 ARR 值 */
+#define DEAD_TIME_US    1.0f        /* 死区时间 (us) */
 
+#define VF_TARGET_FREQ  50.0f       /* 目标频率 (Hz) */
+#define VF_ACCEL        10.0f       /* 加速度 (Hz/s) */
+#define VF_RATIO        0.1386f     /* V/f 比 (V/Hz) */
+#define VF_V_MAX        6.93f       /* 最大电压 (V) = Vdc/√3 */
+#define VF_V_MIN        0.5f        /* 最小电压 (V) */
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -45,13 +60,15 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+static open_loop_vf_t   vf;            /* V/f 控制器实例 */
+static svpwm_output_t   svpwm;         /* SVPWM 实例 */
+static hw_pwm_instance_t hw_pwm;       /* PWM 硬件实例 */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-
+static void vf_self_check(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -88,10 +105,36 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_TIM1_Init();
   MX_ADC1_Init();
   MX_TIM6_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  /* 控制模块初始化 */
+  open_loop_vf_init(&vf, VF_TARGET_FREQ, VF_ACCEL, VF_RATIO, VF_V_MAX, VF_V_MIN);
+  svpwm_init(&svpwm, VDC, PWM_FREQ, PWM_PERIOD);
+
+  hw_pwm_config_t pwm_cfg = {
+      .htim       = &htim1,
+      .period     = PWM_PERIOD,
+      .dead_time  = DEAD_TIME_US,
+      .v_dc       = VDC,
+  };
+  hw_pwm_init(&hw_pwm, &pwm_cfg);
+
+  /* 自检 */
+  vf_self_check();
+
+  /* 启动 TIM1 计数器（不开更新中断） */
+  HAL_TIM_Base_Start(&htim1);
+
+  /* 启动 ADC 注入转换，TIM1 CC4 触发 */
+  HAL_ADCEx_InjectedStart_IT(&hadc1);
+
+  /* 使能 PWM 输出 */
+  hw_pwm_enable(&hw_pwm);
 
   /* USER CODE END 2 */
 
@@ -153,6 +196,74 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+/**
+ * @brief  自检：关闭 SD → 发固定波形 → 关闭输出 → 开启 SD
+ *
+ * 仅用于调试验证 PWM 硬件通路，后续可替换为其他流程。
+ */
+static void vf_self_check(void)
+{
+    /* 1. 关闭驱动器 (SD = 低) */
+    hw_pwm_set_sd(0);
+
+    /* 2. 设置 50% 占空比（三相对称，观测波形用） */
+    pwm_output_t test_pwm = {
+        .freq   = PWM_FREQ,
+        .period = PWM_PERIOD,
+        .cmp_a  = PWM_PERIOD / 2,
+        .cmp_b  = PWM_PERIOD / 2,
+        .cmp_c  = PWM_PERIOD / 2,
+    };
+    hw_pwm_set_duty(&hw_pwm, &test_pwm);
+
+    /* 3. 使能 PWM 输出，示波器观测 */
+    hw_pwm_enable(&hw_pwm);
+    HAL_Delay(2000);
+
+    /* 4. 关闭输出，停止 ADC 中断 */
+    hw_pwm_disable(&hw_pwm);
+    HAL_ADCEx_InjectedStop_IT(&hadc1);
+    HAL_Delay(100);
+
+    /* 5. 开启 SD */
+    hw_pwm_set_sd(1);
+}
+
+/**
+ * @brief  ADC 注入转换完成回调
+ *
+ * TIM1 CC4 触发 ADC 注入转换，转换完成后进入此回调。
+ * 每个 PWM 周期执行一次控制链路:
+ *   open_loop_vf_step → foc_inv_park → svpwm_update → hw_pwm_set_duty
+ *
+ * @param  hadc : ADC 句柄
+ */
+void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+    if (hadc->Instance != ADC1)
+        return;
+
+    /* 读取注入转换结果（当前未使用） */
+    (void)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_1);
+    (void)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_2);
+    (void)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_3);
+
+    float dt = 1.0f / (float)PWM_FREQ;     /* 控制周期 62.5μs */
+
+    /* V/f 步进：更新频率、电压、角度 */
+    open_loop_vf_step(&vf, dt);
+
+    /* 逆 Park 变换：v_d = v_out, v_q = 0 */
+    float v_alpha, v_beta;
+    foc_inv_park(vf.v_out, 0.0f, vf.theta_e, &v_alpha, &v_beta);
+
+    /* SVPWM 计算 */
+    svpwm_update(&svpwm, v_alpha, v_beta);
+
+    /* 更新 PWM 占空比 */
+    hw_pwm_set_duty(&hw_pwm, &svpwm.pwm);
+}
 
 /* USER CODE END 4 */
 
