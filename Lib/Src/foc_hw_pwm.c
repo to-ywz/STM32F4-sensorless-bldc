@@ -20,7 +20,7 @@
  * @param   dead_time_us    死区时间 (us)
  * @return  DTG 寄存器值
  */
-static uint32_t calc_deadtime_reg(f32_t dead_time_us)
+static uint32_t calc_deadtime_reg(float dead_time_us)
 {
     /* STM32F4 高级定时器死区计算 */
     /* Tdtg = 1 / (TIM1_CLK / 1) = 1/168 us = 5.95ns (DTG < 128) */
@@ -28,14 +28,14 @@ static uint32_t calc_deadtime_reg(f32_t dead_time_us)
     /* Tdtg = 8 / (TIM1_CLK / 1) = 8/168 us = 47.6ns (DTG >= 192) */
 
     uint32_t dtg;
-    f32_t tdtg_ns;
+    float tdtg_ns;
 
     if (dead_time_us < 0.0f) {
         dead_time_us = 0.0f;
     }
 
     /* 转换为 ns */
-    f32_t dead_time_ns = dead_time_us * 1000.0f;
+    float dead_time_ns = dead_time_us * 1000.0f;
 
     if (dead_time_ns < 128.0f * (1000.0f / TIM1_CLK_MHZ)) {
         /* DTG[6:0] < 128, Tdtg = Tdts */
@@ -96,7 +96,7 @@ int hw_pwm_init(hw_pwm_instance_t *pwm, const hw_pwm_config_t *config)
 /**
  * @brief   设置 PWM 占空比
  */
-void hw_pwm_set_duty(hw_pwm_instance_t *pwm, const svpwm_pwm_t *output)
+void hw_pwm_set_duty(hw_pwm_instance_t *pwm, const pwm_output_t *output)
 {
     if (pwm == NULL || output == NULL) {
         return;
@@ -180,7 +180,7 @@ uint8_t hw_pwm_is_enabled(const hw_pwm_instance_t *pwm)
 /**
  * @brief   设置死区时间
  */
-void hw_pwm_set_deadtime(hw_pwm_instance_t *pwm, f32_t dead_time)
+void hw_pwm_set_deadtime(hw_pwm_instance_t *pwm, float dead_time)
 {
     if (pwm == NULL) {
         return;

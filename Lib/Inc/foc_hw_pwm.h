@@ -18,22 +18,22 @@
 extern "C" {
 #endif
 
-#include "foc_types.h"
+#include "svpwm.h"
 #include "stm32f4xx_hal.h"
 
 /* PWM 硬件配置 */
 typedef struct {
     TIM_HandleTypeDef *htim;        /* 定时器句柄 (TIM1) */
     uint32_t           period;      /* PWM 周期 (ARR 值) */
-    f32_t              dead_time;   /* 死区时间 (us) */
-    f32_t              v_dc;        /* 母线电压 (V) */
+    float              dead_time;   /* 死区时间 (us) */
+    float              v_dc;        /* 母线电压 (V) */
 } hw_pwm_config_t;
 
 /* PWM 硬件实例 */
 typedef struct {
     hw_pwm_config_t  config;
-    svpwm_pwm_t      pwm;          /* 当前 PWM 值 */
-    uint8_t          enabled;      /* 输出使能标志 */
+    pwm_output_t     pwm;           /* 当前 PWM 值 */
+    uint8_t          enabled;       /* 输出使能标志 */
 } hw_pwm_instance_t;
 
 /**
@@ -47,9 +47,9 @@ int hw_pwm_init(hw_pwm_instance_t *pwm, const hw_pwm_config_t *config);
 /**
  * @brief   设置 PWM 占空比
  * @param   pwm     PWM 实例指针
- * @param   output  PWM 输出值 (比较值)
+ * @param   output  PWM 输出值 (pwm_output_t 指针)
  */
-void hw_pwm_set_duty(hw_pwm_instance_t *pwm, const svpwm_pwm_t *output);
+void hw_pwm_set_duty(hw_pwm_instance_t *pwm, const pwm_output_t *output);
 
 /**
  * @brief   使能 PWM 输出
@@ -81,7 +81,7 @@ uint8_t hw_pwm_is_enabled(const hw_pwm_instance_t *pwm);
  * @param   pwm         PWM 实例指针
  * @param   dead_time   死区时间 (us)
  */
-void hw_pwm_set_deadtime(hw_pwm_instance_t *pwm, f32_t dead_time);
+void hw_pwm_set_deadtime(hw_pwm_instance_t *pwm, float dead_time);
 
 #ifdef __cplusplus
 }
