@@ -25,6 +25,7 @@ MDK-ARM/Objects/
 MDK-ARM/Listings/
 MDK-ARM/DebugConfig/
 MDK-ARM/RTE/
+MDK-ARM/Foc_svpwm_VF/
 MDK-ARM/*.uvoptx
 MDK-ARM/*.uvguix.*
 MDK-ARM/EventRecorderStub.scvd
