@@ -27,6 +27,9 @@ MDK-ARM/DebugConfig/
 MDK-ARM/RTE/
 MDK-ARM/*.uvoptx
 MDK-ARM/*.uvguix.*
+MDK-ARM/EventRecorderStub.scvd
+MDK-ARM/JLinkLog.txt
+MDK-ARM/JLinkSettings.ini
 
 # IAR 编译输出目录（如果有）
 EWARM/
