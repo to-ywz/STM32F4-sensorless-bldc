@@ -23,10 +23,12 @@ extern "C" {
 
 /* PWM 硬件配置 */
 typedef struct {
-    TIM_HandleTypeDef *htim;        /* 定时器句柄 (TIM1) */
-    uint32_t           period;      /* PWM 周期 (ARR 值) */
-    float              dead_time;   /* 死区时间 (us) */
-    float              v_dc;        /* 母线电压 (V) */
+    TIM_HandleTypeDef *htim;              /* 定时器句柄 (TIM1) */
+    uint32_t           timer_clk_hz;      /* 定时器时钟频率 (Hz) */
+    uint32_t           period_ticks;      /* PWM 周期 (ARR 值, ticks) */
+    uint32_t           adc_trigger_ticks; /* CH4 比较值, 用于触发 ADC */
+    float              dead_time_us;      /* 死区时间 (us) */
+    float              v_dc;              /* 母线电压 (V) */
 } hw_pwm_config_t;
 
 /* PWM 硬件实例 */
@@ -77,11 +79,11 @@ void hw_pwm_set_sd(uint8_t enable);
 uint8_t hw_pwm_is_enabled(const hw_pwm_instance_t *pwm);
 
 /**
- * @brief   设置死区时间
- * @param   pwm         PWM 实例指针
- * @param   dead_time   死区时间 (us)
+ * @brief   设置死区时间 (可在运行时调用)
+ * @param   pwm           PWM 实例指针
+ * @param   dead_time_us  死区时间 (us)
  */
-void hw_pwm_set_deadtime(hw_pwm_instance_t *pwm, float dead_time);
+void hw_pwm_set_deadtime(hw_pwm_instance_t *pwm, float dead_time_us);
 
 #ifdef __cplusplus
 }

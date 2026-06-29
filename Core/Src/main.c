@@ -117,10 +117,12 @@ int main(void)
   svpwm_init(&svpwm, VDC, PWM_FREQ, PWM_PERIOD);
 
   hw_pwm_config_t pwm_cfg = {
-      .htim       = &htim1,
-      .period     = PWM_PERIOD,
-      .dead_time  = DEAD_TIME_US,
-      .v_dc       = VDC,
+      .htim              = &htim1,
+      .timer_clk_hz      = 168000000U,
+      .period_ticks      = PWM_PERIOD,
+      .adc_trigger_ticks = (PWM_PERIOD + 1U) / 2U,
+      .dead_time_us      = DEAD_TIME_US,
+      .v_dc              = VDC,
   };
   hw_pwm_init(&hw_pwm, &pwm_cfg);
 
