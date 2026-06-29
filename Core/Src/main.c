@@ -114,6 +114,9 @@ int main(void)
 
   /* 控制模块初始化 */
   open_loop_vf_init(&vf, VF_TARGET_FREQ, VF_ACCEL, VF_RATIO, VF_V_MAX, VF_V_MIN);
+  /* 预定位参数: 0.5V, 持续 0.5s (保守值，待调试) */
+  open_loop_vf_set_align(&vf, 0.5f, 0.5f);
+
   svpwm_init(&svpwm, VDC, PWM_FREQ, PWM_PERIOD);
 
   hw_pwm_config_t pwm_cfg = {
@@ -126,7 +129,7 @@ int main(void)
   };
   hw_pwm_init(&hw_pwm, &pwm_cfg);
 
-  /* 自检 */
+  /* 自检: 验证 PWM 硬件通路 */
   vf_self_check();
 
   /* 启动 TIM1 计数器（不开更新中断） */
@@ -135,8 +138,12 @@ int main(void)
   /* 启动 ADC 注入转换，TIM1 CC4 触发 */
   HAL_ADCEx_InjectedStart_IT(&hadc1);
 
-  /* 使能 PWM 输出 */
+  /* 使能 PWM 输出 (SD = 高) */
   hw_pwm_enable(&hw_pwm);
+
+  /* ADC 偏置校准和母线检查完成后，调用 open_loop_vf_start(&vf) 启动电机。
+     当前阶段: 保持 STOP 状态，不自动启动。
+     TODO: 需要实现 ADC 偏置校准和母线电压检查。 */
 
   /* USER CODE END 2 */
 
@@ -246,25 +253,33 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     if (hadc->Instance != ADC1)
         return;
 
-    /* 读取注入转换结果（当前未使用） */
+    /* 读取注入转换结果（当前未使用，预留电流反馈） */
     (void)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_1);
     (void)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_2);
     (void)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_3);
 
     float dt = 1.0f / (float)PWM_FREQ;     /* 控制周期 62.5μs */
 
-    /* V/f 步进：更新频率、电压、角度 */
+    /* V/f 步进: 根据状态机更新频率、电压、角度 */
     open_loop_vf_step(&vf, dt);
 
-    /* 逆 Park 变换：v_d = v_out, v_q = 0 */
-    float v_alpha, v_beta;
-    foc_inv_park(vf.v_out, 0.0f, vf.theta_e, &v_alpha, &v_beta);
-
-    /* SVPWM 计算 */
-    svpwm_update(&svpwm, v_alpha, v_beta);
-
-    /* 更新 PWM 占空比 */
-    hw_pwm_set_duty(&hw_pwm, &svpwm.pwm);
+    if (open_loop_vf_get_state(&vf) == OPEN_LOOP_VF_STATE_STOP) {
+        /* STOP 状态: 输出零矢量 (50% 占空比，线电压平均为零) */
+        pwm_output_t zero = {
+            .freq   = PWM_FREQ,
+            .period = PWM_PERIOD,
+            .cmp_a  = PWM_PERIOD / 2,
+            .cmp_b  = PWM_PERIOD / 2,
+            .cmp_c  = PWM_PERIOD / 2,
+        };
+        hw_pwm_set_duty(&hw_pwm, &zero);
+    } else {
+        /* ALIGN / RAMP / RUN: 正常控制链路 */
+        float v_alpha, v_beta;
+        foc_inv_park(vf.v_out, 0.0f, vf.theta_e, &v_alpha, &v_beta);
+        svpwm_update(&svpwm, v_alpha, v_beta);
+        hw_pwm_set_duty(&hw_pwm, &svpwm.pwm);
+    }
 }
 
 /* USER CODE END 4 */
