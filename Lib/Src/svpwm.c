@@ -1,12 +1,31 @@
 /**
  * @file svpwm.c
  * @author blacksheep (blacksheep.208h@gmail.com)
- * @brief  SVPWM (7 段式空间矢量脉宽调制)
- * @version 0.1
- * @date 2026-05-31
+ * @brief  SVPWM (零序注入式空间矢量脉宽调制)
+ * @version 0.2
+ * @date 2026-06-29
+ *
+ * @par 算法说明
+ *  1. αβ 电压 → 三相电压 (等幅值 Clarke 逆变换)
+ *  2. 计算零序偏移 v_offset = -0.5*(v_max + v_min)
+ *  3. 加入零序: v_x += v_offset
+ *  4. 转换为占空比: duty_x = 0.5 + v_x / v_dc
+ *  5. CCR = duty * ARR，四舍五入
+ *
+ * @par 中心对齐 PWM 关系
+ *  STM32 TIM1 中心对齐模式: 计数器 0→ARR→0
+ *  PWM mode 1: counter < CCR 时输出高
+ *  占空比 = CCR / ARR
+ *  50% 占空比 → CCR = ARR/2 → 线电压平均为零
+ *
+ * @par 最大调制
+ *  线性调制极限: |V| = Vdc/√3
+ *  实际使用 mod_limit (默认 0.95) 保留裕量
+ *  超限时对 αβ 电压等比缩放，不改变矢量方向
  *
  * @par 版本记录
- *  - 0.1 初始版本，7 段式 SVPWM
+ *  - 0.1 初始版本，扇区时间公式
+ *  - 0.2 重写为零序注入方式
  *
  * @copyright Copyright (c) 2026
  *
@@ -15,14 +34,49 @@
 #include "svpwm.h"
 #include <math.h>
 
-#define SQRT3 1.7320508f
+#define SQRT3_OVER_2  0.8660254f   /* √3/2 */
+
+/**
+ * @brief 浮点 CCR 转换 (四舍五入 + 限幅)
+ */
+static uint32_t svpwm_float_to_ccr(float value, uint32_t period)
+{
+    if (!isfinite(value)) {
+        return period / 2U;
+    }
+    if (value <= 0.0f) {
+        return 0U;
+    }
+    if (value >= (float)period) {
+        return period;
+    }
+    return (uint32_t)(value + 0.5f);
+}
+
+/**
+ * @brief 输出安全零矢量 (50% 占空比)
+ */
+static void svpwm_safe_output(svpwm_output_t *svpwm)
+{
+    uint32_t half = svpwm->pwm.period / 2U;
+    svpwm->pwm.cmp_a = half;
+    svpwm->pwm.cmp_b = half;
+    svpwm->pwm.cmp_c = half;
+    svpwm->fault = 1;
+}
 
 void svpwm_init(svpwm_output_t *svpwm, float v_dc, uint16_t freq, uint16_t period)
 {
     svpwm->v_alpha  = 0.0f;
     svpwm->v_beta   = 0.0f;
-    svpwm->v_dc     = v_dc;
     svpwm->sector   = 0;
+    svpwm->fault    = 0;
+
+    svpwm->cfg.v_dc            = v_dc;
+    svpwm->cfg.period          = period;
+    svpwm->cfg.freq            = freq;
+    svpwm->cfg.min_pulse_ticks = 0;       /* 默认不启用 */
+    svpwm->cfg.mod_limit       = 0.95f;   /* 默认 95% 调制率 */
 
     svpwm->pwm.freq   = freq;
     svpwm->pwm.period = period;
@@ -31,93 +85,103 @@ void svpwm_init(svpwm_output_t *svpwm, float v_dc, uint16_t freq, uint16_t perio
     svpwm->pwm.cmp_c  = period / 2;
 }
 
-/**
- * @brief 扇区判断
- *
- * 利用三个参考量的符号组合查表:
- *   U1 = vβ
- *   U2 = (√3*vα - vβ) / 2
- *   U3 = (-√3*vα - vβ) / 2
- *
- * @return uint8_t 扇区编号 (1~6)
- */
-static uint8_t svpwm_get_sector(float v_alpha, float v_beta)
+void svpwm_set_mod_limit(svpwm_output_t *svpwm, float mod_limit)
 {
-    float u1 = v_beta;
-    float u2 = (SQRT3 * v_alpha - v_beta) * 0.5f;
-    float u3 = (-SQRT3 * v_alpha - v_beta) * 0.5f;
-
-    uint8_t a = (u1 > 0.0f) ? 1 : 0;
-    uint8_t b = (u2 > 0.0f) ? 1 : 0;
-    uint8_t c = (u3 > 0.0f) ? 1 : 0;
-
-    uint8_t n = (c << 2) | (b << 1) | a;
-
-    static const uint8_t table[8] = {0, 2, 6, 1, 4, 3, 5, 0};
-    return table[n];
+    if (svpwm == NULL) {
+        return;
+    }
+    if (mod_limit < 0.0f) mod_limit = 0.0f;
+    if (mod_limit > 1.0f) mod_limit = 1.0f;
+    svpwm->cfg.mod_limit = mod_limit;
 }
 
 void svpwm_update(svpwm_output_t *svpwm, float v_alpha, float v_beta)
 {
+    if (svpwm == NULL) {
+        return;
+    }
+
     svpwm->v_alpha = v_alpha;
     svpwm->v_beta  = v_beta;
+    svpwm->fault   = 0;
 
-    float v_dc = svpwm->v_dc;
-    float Tpwm = (float)svpwm->pwm.period;
+    float v_dc   = svpwm->cfg.v_dc;
+    float period = (float)svpwm->cfg.period;
 
-    /* 1. 扇区判断 */
-    uint8_t sector = svpwm_get_sector(v_alpha, v_beta);
-    svpwm->sector = sector;
-
-    /* 2. 计算基本矢量作用时间 */
-    float K = SQRT3 * Tpwm / v_dc;
-    float a = K * (SQRT3 * v_alpha - v_beta) / SQRT3;  /* case 1/3 */
-    float b = K * (SQRT3 * v_alpha + v_beta) / SQRT3;  /* case 2/6 */
-    float c = K * v_beta;                               /* case 1/3/4/6 */
-
-    float T1, T2;
-    switch (sector) {
-        case 1: T1 =  a; T2 =  c; break;
-        case 2: T1 =  b; T2 = -a; break;
-        case 3: T1 =  c; T2 = -b; break;
-        case 4: T1 = -a; T2 = -c; break;
-        case 5: T1 = -b; T2 =  a; break;
-        case 6: T1 = -c; T2 =  b; break;
-        default: T1 = 0; T2 = 0; break;
+    /* ---- 输入校验 ---- */
+    if (!isfinite(v_alpha) || !isfinite(v_beta) ||
+        !isfinite(v_dc) || v_dc <= 0.0f || period <= 0.0f) {
+        svpwm_safe_output(svpwm);
+        return;
     }
 
-    /* 过调制限幅: T1 + T2 <= Tpwm */
-    float sum = T1 + T2;
-    if (sum > Tpwm) {
-        T1 = T1 * Tpwm / sum;
-        T2 = T2 * Tpwm / sum;
-    }
-    float T0 = Tpwm - T1 - T2;
-
-    /* 3. 7 段式中心对齐: 计算三段切换点 */
-    float t_a = T0 * 0.25f;
-    float t_b = t_a + T1 * 0.5f;
-    float t_c = t_b + T2 * 0.5f;
-
-    /* 4. 按扇区分配到三相比较值 */
-    uint32_t cmp_a, cmp_b, cmp_c;
-    switch (sector) {
-        case 1: cmp_a = t_a; cmp_b = t_b; cmp_c = t_c; break;
-        case 2: cmp_a = t_b; cmp_b = t_a; cmp_c = t_c; break;
-        case 3: cmp_a = t_c; cmp_b = t_a; cmp_c = t_b; break;
-        case 4: cmp_a = t_c; cmp_b = t_b; cmp_c = t_a; break;
-        case 5: cmp_a = t_b; cmp_b = t_c; cmp_c = t_a; break;
-        case 6: cmp_a = t_a; cmp_b = t_c; cmp_c = t_b; break;
-        default: cmp_a = cmp_b = cmp_c = (uint32_t)(Tpwm * 0.5f); break;
+    /* ---- 过调制保护: 等比缩放 αβ 电压 ---- */
+    float v_mag_sq = v_alpha * v_alpha + v_beta * v_beta;
+    float v_max = v_dc * svpwm->cfg.mod_limit / 1.7320508f; /* Vdc * mod_limit / √3 */
+    if (v_max <= 0.0f) {
+        svpwm_safe_output(svpwm);
+        return;
     }
 
-    /* 5. 限幅 [0, period] */
-    uint32_t period = svpwm->pwm.period;
-    if (cmp_a > period) cmp_a = period;
-    if (cmp_b > period) cmp_b = period;
-    if (cmp_c > period) cmp_c = period;
+    float v_max_sq = v_max * v_max;
+    if (v_mag_sq > v_max_sq) {
+        float scale = v_max / sqrtf(v_mag_sq);
+        v_alpha *= scale;
+        v_beta  *= scale;
+    }
 
-    svpwm->pwm.cmp_a = cmp_a;
-    svpwm->pwm.cmp_b = cmp_b;
-    svpwm->pwm.cmp_c = cmp_c;
+    /* ---- αβ → 三相电压 (等幅值 Clarke 逆变换) ---- */
+    /* v_a = v_alpha
+       v_b = -0.5 * v_alpha + (√3/2) * v_beta
+       v_c = -0.5 * v_alpha - (√3/2) * v_beta */
+    float v_a = v_alpha;
+    float v_b = -0.5f * v_alpha + SQRT3_OVER_2 * v_beta;
+    float v_c = -0.5f * v_alpha - SQRT3_OVER_2 * v_beta;
+
+    /* ---- 零序注入 (DPWM/SVPWM) ---- */
+    /* v_offset = -0.5 * (v_max_phase + v_min_phase)
+       效果: 将三相电压居中，最大化线性调制范围 */
+    float v_max_phase = v_a;
+    float v_min_phase = v_a;
+    if (v_b > v_max_phase) v_max_phase = v_b;
+    if (v_c > v_max_phase) v_max_phase = v_c;
+    if (v_b < v_min_phase) v_min_phase = v_b;
+    if (v_c < v_min_phase) v_min_phase = v_c;
+
+    float v_offset = -0.5f * (v_max_phase + v_min_phase);
+
+    v_a += v_offset;
+    v_b += v_offset;
+    v_c += v_offset;
+
+    /* ---- 转换为 CCR ---- */
+    /* duty = 0.5 + v_x / v_dc
+       CCR = duty * ARR */
+    float duty_a = 0.5f + v_a / v_dc;
+    float duty_b = 0.5f + v_b / v_dc;
+    float duty_c = 0.5f + v_c / v_dc;
+
+    float ccr_a = duty_a * period;
+    float ccr_b = duty_b * period;
+    float ccr_c = duty_c * period;
+
+    svpwm->pwm.cmp_a = svpwm_float_to_ccr(ccr_a, svpwm->cfg.period);
+    svpwm->pwm.cmp_b = svpwm_float_to_ccr(ccr_b, svpwm->cfg.period);
+    svpwm->pwm.cmp_c = svpwm_float_to_ccr(ccr_c, svpwm->cfg.period);
+
+    /* ---- 扇区记录 (仅用于调试) ---- */
+    /* 通过 αβ 符号判断大致扇区 */
+    if (v_beta >= 0.0f) {
+        if (v_alpha >= 0.0f) {
+            svpwm->sector = (v_beta * 0.5773503f > v_alpha) ? 2 : 1; /* √3/3 ≈ 0.577 */
+        } else {
+            svpwm->sector = (v_beta * 0.5773503f > -v_alpha) ? 2 : 3;
+        }
+    } else {
+        if (v_alpha < 0.0f) {
+            svpwm->sector = (-v_beta * 0.5773503f > -v_alpha) ? 5 : 4;
+        } else {
+            svpwm->sector = (-v_beta * 0.5773503f > v_alpha) ? 5 : 6;
+        }
+    }
 }
