@@ -121,11 +121,14 @@ int hw_pwm_init(hw_pwm_instance_t *pwm, const hw_pwm_config_t *config)
                                        pwm->config.timer_clk_hz);
     dtg = calc_deadtime_reg_from_ticks(deadtime_ticks);
 
-    htim->Instance->BDTR &= ~TIM_BDTR_DTG;
-    htim->Instance->BDTR |= dtg;
+    /* 只修改 BDTR 的 DTG 字段，不影响 Break、MOE 等配置 */
+    MODIFY_REG(htim->Instance->BDTR, TIM_BDTR_DTG, dtg & TIM_BDTR_DTG);  
 
-    /* 产生更新事件，加载 ARR 和 CCR */
-    __HAL_TIM_GENERATE_EVENT(htim, TIM_EVENTSOURCE_UPDATE);
+    /* 产生更新事件，加载 ARR 和 CCR 到影子寄存器 */
+    htim->Instance->EGR = TIM_EGR_UG;
+
+    /* 清除 UG 可能产生的更新标志 */
+    __HAL_TIM_CLEAR_FLAG(htim, TIM_FLAG_UPDATE);
 
     /* SD 初始化保持低电平，关闭驱动器 */
     HAL_GPIO_WritePin(SD_GPIO_PORT, SD_GPIO_PIN, GPIO_PIN_RESET);
