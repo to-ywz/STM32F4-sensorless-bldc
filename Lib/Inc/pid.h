@@ -2,8 +2,13 @@
  * @file pid.h
  * @author blacksheep (blacksheep.208h@gmail.com)
  * @brief PID 控制器，支持积分限幅 (anti-windup) 和输出限幅
- * @version 0.2
- * @date 2026-05-29
+ * @version 0.3
+ * @date 2026-06-29
+ *
+ * @par 版本记录
+ *  - 0.1 初始版本
+ *  - 0.2 conditional integration anti-windup
+ *  - 0.3 增加 dt 异常保护、NaN/Inf 防护
  *
  * @copyright Copyright (c) 2026
  *
@@ -11,6 +16,9 @@
 
 #ifndef __PID_H__
 #define __PID_H__
+
+#include <math.h>
+#include <stddef.h>
 
 /**
  * @brief PID 控制器结构体

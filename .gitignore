@@ -57,3 +57,6 @@ Desktop.ini
 
 # 个人笔记
 notes/
+# 测试编译产物
+Tests/*.exe
+Tests/*.o
