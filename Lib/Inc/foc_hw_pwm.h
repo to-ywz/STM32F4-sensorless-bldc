@@ -20,6 +20,7 @@ extern "C" {
 
 #include "svpwm.h"
 #include "stm32f4xx_hal.h"
+#include <stddef.h>
 
 /* PWM 硬件配置 */
 typedef struct {

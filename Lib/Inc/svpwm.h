@@ -17,6 +17,7 @@
 #define SVPWM_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 /**
  * @brief PWM 输出

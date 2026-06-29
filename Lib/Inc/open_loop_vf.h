@@ -17,6 +17,7 @@
 #define OPEN_LOOP_VF_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 /**
  * @brief V/F 控制状态枚举
