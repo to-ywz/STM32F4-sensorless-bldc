@@ -57,8 +57,22 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define PHASE_U_VOLT_Pin GPIO_PIN_6
+#define PHASE_U_VOLT_GPIO_Port GPIOF
+#define PHASE_V_VOLT_Pin GPIO_PIN_7
+#define PHASE_V_VOLT_GPIO_Port GPIOF
+#define PHASE_W_VOLT_Pin GPIO_PIN_8
+#define PHASE_W_VOLT_GPIO_Port GPIOF
+#define VBUS_Pin GPIO_PIN_9
+#define VBUS_GPIO_Port GPIOF
+#define ADC_IU_Pin GPIO_PIN_3
+#define ADC_IU_GPIO_Port GPIOA
+#define ADC_IV_Pin GPIO_PIN_4
+#define ADC_IV_GPIO_Port GPIOA
 #define DRIVER_SD_Pin GPIO_PIN_5
 #define DRIVER_SD_GPIO_Port GPIOA
+#define ADC_IW_Pin GPIO_PIN_6
+#define ADC_IW_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
 
