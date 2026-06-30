@@ -60,3 +60,6 @@ notes/
 # 测试编译产物
 Tests/*.exe
 Tests/*.o
+
+# 变更记录 (本地维护)
+CHANGELOG.md
