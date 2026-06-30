@@ -110,6 +110,7 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM6_Init();
   MX_USART1_UART_Init();
+  MX_ADC3_Init();
   /* USER CODE BEGIN 2 */
 
   /* 控制模块初始化 */
@@ -144,7 +145,7 @@ int main(void)
   /* ADC 偏置校准和母线检查完成后，调用 open_loop_vf_start(&vf) 启动电机。
      当前阶段: 保持 STOP 状态，不自动启动。
      TODO: 需要实现 ADC 偏置校准和母线电压检查。 */
-
+  // open_loop_vf_start(&vf);
   /* USER CODE END 2 */
 
   /* Infinite loop */
