@@ -45,11 +45,11 @@
 #define PWM_PERIOD      5249        /* TIM1 ARR 值 */
 #define DEAD_TIME_US    1.0f        /* 死区时间 (us) */
 
-#define VF_TARGET_FREQ  50.0f       /* 目标频率 (Hz) */
-#define VF_ACCEL        10.0f       /* 加速度 (Hz/s) */
-#define VF_RATIO        0.1386f     /* V/f 比 (V/Hz) */
-#define VF_V_MAX        6.93f       /* 最大电压 (V) = Vdc/√3 */
-#define VF_V_MIN        0.5f        /* 最小电压 (V) */
+#define VF_TARGET_FREQ  17.0f       /* 目标频率 (Hz) */
+#define VF_ACCEL        2.0f        /* 加速度 (Hz/s) */
+#define VF_RATIO        0.05f       /* V/f 比 (V/Hz) */
+#define VF_V_MAX        5.93f       /* 最大电压 (V) = Vdc/√3 */
+#define VF_V_MIN        0.2f        /* 最小电压 (V) */
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -145,7 +145,7 @@ int main(void)
   /* ADC 偏置校准和母线检查完成后，调用 open_loop_vf_start(&vf) 启动电机。
      当前阶段: 保持 STOP 状态，不自动启动。
      TODO: 需要实现 ADC 偏置校准和母线电压检查。 */
-  // open_loop_vf_start(&vf);
+  open_loop_vf_start(&vf);
   /* USER CODE END 2 */
 
   /* Infinite loop */
