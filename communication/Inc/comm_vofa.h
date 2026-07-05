@@ -15,7 +15,7 @@ extern "C" {
 #include "comm_uart.h"
 #include <stdint.h>
 
-#define COMM_VOFA_MAX_CHANNELS  16U
+#define COMM_VOFA_MAX_CHANNELS  20U
 
 typedef struct {
     comm_uart_t *uart;

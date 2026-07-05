@@ -34,6 +34,7 @@
 #include "comm_uart_stm32.h"
 #include "comm_vofa.h"
 #include "comm_cmd.h"
+#include "comm_scope.h"
 #include <math.h>
 /* USER CODE END Includes */
 
@@ -59,9 +60,12 @@
 #define DEBUG_UART_RX_RING_SIZE  128U
 #define DEBUG_UART_TX_RING_SIZE  512U
 #define DEBUG_UART_TX_DMA_SIZE   64U
-#define DEBUG_VOFA_PERIOD_MS     1U
 #define DEBUG_FREQ_MIN_HZ        0.0f
 #define DEBUG_FREQ_MAX_HZ        30.0f
+
+/* TODO: 高速 3 通道直出会导致 VOFA+ 卡死，后续改为分频输出或触发捕获。 */
+#define SCOPE_MODE                    SCOPE_MODE_REALTIME_LOW_RATE
+#define SCOPE_LOW_RATE_PERIOD_MS      1U
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -80,6 +84,7 @@ static comm_uart_t       debug_uart;      /* 调试串口抽象对象 */
 static comm_uart_stm32_t debug_uart_drv;  /* STM32 串口适配对象 */
 static comm_vofa_t       debug_vofa;      /* VOFA+ JustFloat 输出对象 */
 static comm_cmd_t        debug_cmd;       /* 串口文本命令解析对象 */
+static comm_scope_t      debug_scope;     /* 调试示波输出对象 */
 
 static uint8_t debug_uart_rx_dma_buf[DEBUG_UART_RX_DMA_SIZE];
 static uint8_t debug_uart_rx_ring_buf[DEBUG_UART_RX_RING_SIZE];
@@ -93,6 +98,8 @@ void SystemClock_Config(void);
 static void vf_self_check(void);
 static void debug_comm_init(void);
 static void debug_comm_task(void);
+static void debug_scope_low_rate_task(void);
+static void debug_scope_send_pwm_3ch(const pwm_output_t *pwm);
 static void debug_cmd_start(void *user);
 static void debug_cmd_stop(void *user);
 static void debug_cmd_set_freq(void *user, float freq_hz);
@@ -298,6 +305,11 @@ static void debug_comm_init(void)
         .freq_min_hz = DEBUG_FREQ_MIN_HZ,
         .freq_max_hz = DEBUG_FREQ_MAX_HZ,
     };
+    comm_scope_config_t scope_cfg = {
+        .vofa               = &debug_vofa,
+        .mode               = SCOPE_MODE,
+        .low_rate_period_ms = SCOPE_LOW_RATE_PERIOD_MS,
+    };
 
     if (comm_uart_stm32_init(&debug_uart, &debug_uart_drv, &uart_cfg) < 0) {
         Error_Handler();
@@ -312,41 +324,76 @@ static void debug_comm_init(void)
     if (comm_cmd_init(&debug_cmd, &cmd_cfg) < 0) {
         Error_Handler();
     }
+
+    if (comm_scope_init(&debug_scope, &scope_cfg) < 0) {
+        Error_Handler();
+    }
 }
 
 /**
- * @brief 周期发送 VOFA+ JustFloat 调试数据
- *
- * 通道顺序:
- *   0 - V/f 当前频率 Hz
- *   1 - V/f 目标频率 Hz
- *   2 - V/f 输出电压 V
- *   3 - V/f 电角度 rad
- *   4 - V/f 状态枚举
- *   5 - 最近一次命令状态
+ * @brief 调试通信主循环任务
  */
 static void debug_comm_task(void)
 {
-    static uint32_t last_tick;
-    uint32_t now = HAL_GetTick();
-
     (void)comm_cmd_poll(&debug_cmd);
 
-    if ((uint32_t)(now - last_tick) < DEBUG_VOFA_PERIOD_MS) {
-        return;
-    }
-    last_tick = now;
+    debug_scope_low_rate_task();
+}
 
-    float values[6] = {
+/**
+ * @brief 低速多通道实时输出
+ *
+ * 当前最多支持 20 个 JustFloat 通道。未接入的通道先填 0，便于
+ * 后续逐步加入三相电流、三相 duty、Ud/Uq 等变量。
+ */
+static void debug_scope_low_rate_task(void)
+{
+    float values[SCOPE_MAX_CHANNELS] = {
         vf.freq,
         vf.target_freq,
         vf.v_out,
         vf.theta_e,
         (float)open_loop_vf_get_state(&vf),
         (float)comm_cmd_get_last_status(&debug_cmd),
+        (float)svpwm.pwm.cmp_a,
+        (float)svpwm.pwm.cmp_b,
+        (float)svpwm.pwm.cmp_c,
+        (float)svpwm.sector,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
     };
 
-    (void)comm_vofa_send_justfloat(&debug_vofa, values, 6U);
+    (void)comm_scope_poll_low_rate(&debug_scope,
+                                   HAL_GetTick(),
+                                   values,
+                                   SCOPE_MAX_CHANNELS);
+}
+
+/**
+ * @brief 高速 3 通道 PWM 同步输出采样点
+ * @param pwm PWM 输出对象。
+ */
+static void debug_scope_send_pwm_3ch(const pwm_output_t *pwm)
+{
+    if (pwm == NULL) {
+        return;
+    }
+
+    float values[SCOPE_HIGH_RATE_CHANNELS] = {
+        (float)pwm->cmp_a,
+        (float)pwm->cmp_b,
+        (float)pwm->cmp_c,
+    };
+
+    (void)comm_scope_send_high_rate_3ch(&debug_scope, values);
 }
 
 /**
@@ -411,12 +458,20 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
             .cmp_c  = PWM_PERIOD / 2,
         };
         hw_pwm_set_duty(&hw_pwm, &zero);
+
+#if (SCOPE_MODE == SCOPE_MODE_HIGH_RATE_3CH)
+        debug_scope_send_pwm_3ch(&zero);
+#endif
     } else {
         /* ALIGN / RAMP / RUN: 正常控制链路 */
         float v_alpha, v_beta;
         foc_inv_park(vf.v_out, 0.0f, vf.theta_e, &v_alpha, &v_beta);
         svpwm_update(&svpwm, v_alpha, v_beta);
         hw_pwm_set_duty(&hw_pwm, &svpwm.pwm);
+
+#if (SCOPE_MODE == SCOPE_MODE_HIGH_RATE_3CH)
+        debug_scope_send_pwm_3ch(&svpwm.pwm);
+#endif
     }
 }
 

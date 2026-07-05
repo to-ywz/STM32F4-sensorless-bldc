@@ -47,7 +47,8 @@
 │   │   ├── comm_uart.h          # 通用 UART 抽象层
 │   │   ├── comm_uart_stm32.h    # STM32 HAL UART DMA 适配层
 │   │   ├── comm_vofa.h          # VOFA+ JustFloat 输出
-│   │   └── comm_cmd.h           # 文本命令解析
+│   │   ├── comm_cmd.h           # 文本命令解析
+│   │   └── comm_scope.h         # 调试示波输出配置
 │   └── Src/
 ├── Docs/               # 文档
 └── README.md           # 本文件
@@ -102,7 +103,12 @@
 
 ### VOFA+ 输出
 
-VOFA+ 使用 JustFloat 协议，当前输出通道为：
+VOFA+ 使用 JustFloat 协议，当前支持两种输出配置：
+
+- `SCOPE_MODE_REALTIME_LOW_RATE`：低速多通道实时输出，最多 20 通道，默认 1kHz。
+- `SCOPE_MODE_HIGH_RATE_3CH`：高速 3 通道 PWM 同步输出，随 16kHz 控制中断输出。该模式当前会导致 VOFA+ 卡死，暂不启用，后续改为分频输出或触发捕获。
+
+低速多通道模式当前输出通道为：
 
 | 通道 | 含义 | 单位 |
 |---|---|---|
@@ -112,8 +118,13 @@ VOFA+ 使用 JustFloat 协议，当前输出通道为：
 | 3 | V/f 电角度 `vf.theta_e` | rad |
 | 4 | V/f 状态枚举 | - |
 | 5 | 最近一次命令状态 | - |
+| 6 | PWM A 相比较值 `cmp_a` | tick |
+| 7 | PWM B 相比较值 `cmp_b` | tick |
+| 8 | PWM C 相比较值 `cmp_c` | tick |
+| 9 | SVPWM 扇区 | - |
+| 10-19 | 预留 | - |
 
-当前输出周期由 `Core/Src/main.c` 中的 `DEBUG_VOFA_PERIOD_MS` 控制。
+当前输出配置由 `Core/Src/main.c` 中的 `SCOPE_MODE` 控制。
 
 ### 文本命令输入
 
@@ -130,6 +141,63 @@ freq 17.0
 - `freq x`：设置目标频率，当前限制为 `0.0Hz` 到 `30.0Hz`。
 
 命令解析在主循环中执行，串口接收回调只负责把数据写入 ringbuffer。
+
+### 测试步骤
+
+1. 测试低速多通道模式
+
+确认 `Core/Src/main.c` 中配置为：
+
+```c
+#define SCOPE_MODE  SCOPE_MODE_REALTIME_LOW_RATE
+#define SCOPE_LOW_RATE_PERIOD_MS  1U
+```
+
+VOFA+ 选择 JustFloat，串口参数为 `3000000, 8N1`。连接后应看到 20 个通道，其中 0-9 为当前有效通道，10-19 为预留通道。
+
+2. 测试文本命令输入
+
+在低速多通道模式下发送：
+
+```text
+freq 10
+start
+stop
+```
+
+观察通道变化：
+
+| 命令 | 预期现象 |
+|---|---|
+| `freq 10` | 通道 1 变为 10 |
+| `start` | 通道 4 从 STOP 进入 ALIGN/RAMP/RUN |
+| `stop` | 通道 4 回到 STOP，通道 0 回到 0 |
+
+3. 测试高速 3 通道模式
+
+当前保留该模式作为后续设计入口，暂不建议启用。实测 VOFA+ 在 3 通道 16kHz 连续 JustFloat 输出下会卡死，后续需要改为 `16kHz 同步采样 + 分频输出`，或改为 RAM 触发捕获后再慢速发送。
+
+将 `Core/Src/main.c` 中配置改为：
+
+```c
+#define SCOPE_MODE  SCOPE_MODE_HIGH_RATE_3CH
+```
+
+重新编译烧录。该模式只输出 3 个通道：
+
+| 通道 | 含义 |
+|---|---|
+| 0 | PWM A 相比较值 `cmp_a` |
+| 1 | PWM B 相比较值 `cmp_b` |
+| 2 | PWM C 相比较值 `cmp_c` |
+
+该输出在 ADC 注入转换完成回调中调用，和 16kHz PWM 控制周期同步。
+
+4. 高速模式下测试输入
+
+高速模式下仍支持 `start`、`stop`、`freq x` 输入，但该模式下串口输出接近 3Mbps 上限，建议只偶尔发送命令，不要连续刷命令。
+
+若高速模式下 VOFA+ 卡顿、丢帧或曲线异常，优先判断为串口链路或上位机吞吐不足。可临时降低输出频率或改回低速多通道模式验证控制逻辑。
 
 ## 快速开始
 
@@ -164,6 +232,7 @@ freq 17.0
 ## 当前问题
 
 - **过流保护触发**：电机可驱动但加速过程中驱动板过流灯闪烁，怀疑 accel=10 Hz/s 过快导致滑差过大，待降低加速度验证
+- **高速示波输出卡死**：`SCOPE_MODE_HIGH_RATE_3CH` 以 16kHz 连续输出 3 通道 JustFloat 时，VOFA+ 会卡死。该模式暂不启用，后续改为分频输出或触发捕获模式。
 
 ## 许可证
 

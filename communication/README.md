@@ -23,11 +23,20 @@
 - `comm_uart` 是通用通信抽象层，不包含 STM32 HAL 类型。
 - `comm_uart_stm32` 是 STM32 HAL 适配层，负责把 `UART_HandleTypeDef`、DMA 和 HAL 回调接到通用接口上。
 - `comm_ringbuf` 是通用字节环形缓冲区，不依赖 STM32。
+- `comm_scope` 是调试示波输出模块，只负责输出模式、发送周期和 JustFloat 发送，不依赖 FOC 或 STM32 HAL。
 - 暂不使用动态内存。后续若需要更强封闭性，再把 `comm_uart` 收敛为 opaque handle + 用户静态 storage。
 
 ## 当前调试输出
 
-`Core/Src/main.c` 已接入 USART1 调试输出，主循环按 `DEBUG_VOFA_PERIOD_MS` 周期发送一帧 VOFA+ JustFloat 数据：
+`Core/Src/main.c` 已接入 USART1 调试输出，当前通过 `SCOPE_MODE` 选择输出配置。
+
+### 低速多通道模式
+
+```c
+#define SCOPE_MODE  SCOPE_MODE_REALTIME_LOW_RATE
+```
+
+该模式在主循环中按 `SCOPE_LOW_RATE_PERIOD_MS` 周期发送，当前默认 1ms，最多 20 通道：
 
 | 通道 | 含义 | 单位 |
 |---|---|---|
@@ -37,12 +46,37 @@
 | 3 | V/f 电角度 `vf.theta_e` | rad |
 | 4 | V/f 状态枚举 | - |
 | 5 | 最近一次命令状态 | - |
+| 6 | PWM A 相比较值 `cmp_a` | tick |
+| 7 | PWM B 相比较值 `cmp_b` | tick |
+| 8 | PWM C 相比较值 `cmp_c` | tick |
+| 9 | SVPWM 扇区 | - |
+| 10-19 | 预留 | - |
+
+20 通道 JustFloat 每帧 84 字节，1kHz 输出约 840kbps，适合 3Mbps 串口长期观察。
+
+### 高速 3 通道模式
+
+```c
+#define SCOPE_MODE  SCOPE_MODE_HIGH_RATE_3CH
+```
+
+当前该模式仅作为后续设计入口，暂不建议启用。实测 VOFA+ 在 3 通道 16kHz 连续 JustFloat 输出下会卡死，后续需要改为分频输出或触发捕获。
+
+该模式在 ADC 注入转换完成回调中调用，和 16kHz PWM 控制周期同步。
+当前输出三相 PWM 比较值：
+
+| 通道 | 含义 | 单位 |
+|---|---|---|
+| 0 | PWM A 相比较值 `cmp_a` | tick |
+| 1 | PWM B 相比较值 `cmp_b` | tick |
+| 2 | PWM C 相比较值 `cmp_c` | tick |
+
+3 通道 JustFloat 每帧 16 字节，16kHz 输出约 2.56Mbps，已经接近 3Mbps 串口的实用上限。
 
 VOFA+ 配置为 JustFloat，串口参数为 3000000、8N1。
 
 USART1 位于 APB2，总线时钟当前为 84MHz。3Mbps 在该时钟下可得到有效分频，
-框架侧由 DMA 承担搬运。当前 6 通道 JustFloat 每帧 28 字节，
-输出周期由 `DEBUG_VOFA_PERIOD_MS` 控制。
+框架侧由 DMA 承担搬运。
 实际使用时还需要确认 USB 转串口芯片、上位机驱动和接线质量支持 3Mbps。
 
 ## 当前输入命令

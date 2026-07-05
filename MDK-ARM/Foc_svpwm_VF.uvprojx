@@ -753,6 +753,11 @@
               <FileType>1</FileType>
               <FilePath>..\communication\Src\comm_cmd.c</FilePath>
             </File>
+            <File>
+              <FileName>comm_scope.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\communication\Src\comm_scope.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
