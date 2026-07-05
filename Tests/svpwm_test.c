@@ -3,7 +3,7 @@
  * @brief SVPWM PC 端单元测试
  * @date 2026-06-29
  *
- * 编译: gcc -std=c99 -Wall -I Lib\Inc -o Tests\svpwm_test.exe Tests\svpwm_test.c Lib\Src\svpwm.c -lm
+ * 编译: gcc -std=c99 -Wall -I foc\Inc -o Tests\svpwm_test.exe Tests\svpwm_test.c foc\Src\svpwm.c -lm
  * 返回 0 = 全部通过, 非 0 = 失败数
  * CSV 数据输出到 stderr，便于重定向: svpwm_test.exe 2> sweep.csv
  */
@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <stddef.h>
-#include "../Lib/Inc/svpwm.h"
+#include "../foc/Inc/svpwm.h"
 
 static int g_pass = 0;
 static int g_fail = 0;

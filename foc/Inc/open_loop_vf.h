@@ -91,6 +91,16 @@ void open_loop_vf_init(open_loop_vf_t *vf, float target_freq, float accel,
 void open_loop_vf_set_align(open_loop_vf_t *vf, float align_voltage, float align_time);
 
 /**
+ * @brief 设置目标频率
+ *
+ * 仅修改目标频率，不直接改变启停状态。
+ *
+ * @param vf          : V/f 实例指针
+ * @param target_freq : 目标频率 (Hz)
+ */
+void open_loop_vf_set_target_freq(open_loop_vf_t *vf, float target_freq);
+
+/**
  * @brief 启动 V/F 控制
  *
  * 从 STOP 进入 ALIGN (如有配置) 或直接进入 RAMP。

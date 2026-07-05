@@ -341,7 +341,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F407xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../Lib/Inc</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../foc/Inc;../communication/Inc</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -701,27 +701,57 @@
             <File>
               <FileName>foc_hw_pwm.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Lib\Src\foc_hw_pwm.c</FilePath>
+              <FilePath>..\foc\Src\foc_hw_pwm.c</FilePath>
             </File>
             <File>
               <FileName>foc_math.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Lib\Src\foc_math.c</FilePath>
+              <FilePath>..\foc\Src\foc_math.c</FilePath>
             </File>
             <File>
               <FileName>open_loop_vf.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Lib\Src\open_loop_vf.c</FilePath>
+              <FilePath>..\foc\Src\open_loop_vf.c</FilePath>
             </File>
             <File>
               <FileName>pid.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Lib\Src\pid.c</FilePath>
+              <FilePath>..\foc\Src\pid.c</FilePath>
             </File>
             <File>
               <FileName>svpwm.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Lib\Src\svpwm.c</FilePath>
+              <FilePath>..\foc\Src\svpwm.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Communication</GroupName>
+          <Files>
+            <File>
+              <FileName>comm_uart.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\communication\Src\comm_uart.c</FilePath>
+            </File>
+            <File>
+              <FileName>comm_ringbuf.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\communication\Src\comm_ringbuf.c</FilePath>
+            </File>
+            <File>
+              <FileName>comm_uart_stm32.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\communication\Src\comm_uart_stm32.c</FilePath>
+            </File>
+            <File>
+              <FileName>comm_vofa.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\communication\Src\comm_vofa.c</FilePath>
+            </File>
+            <File>
+              <FileName>comm_cmd.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\communication\Src\comm_cmd.c</FilePath>
             </File>
           </Files>
         </Group>

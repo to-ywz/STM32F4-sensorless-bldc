@@ -3,7 +3,7 @@
  * @brief PID 控制器 PC 端单元测试 (无 printf 依赖)
  * @date 2026-06-29
  *
- * 编译 (PC): gcc -std=c99 -Wall -o pid_test.exe pid_test.c ../Lib/Src/pid.c -lm
+ * 编译 (PC): gcc -std=c99 -Wall -o pid_test.exe pid_test.c ../foc/Src/pid.c -lm
  * 运行: ./pid_test.exe ; echo $?
  * 返回 0 = 全部通过, 非 0 = 失败数
  *
@@ -13,7 +13,7 @@
 
 #include <math.h>
 #include <stddef.h>
-#include "../Lib/Inc/pid.h"
+#include "../foc/Inc/pid.h"
 
 static int g_pass = 0;
 static int g_fail = 0;

@@ -49,6 +49,15 @@ void open_loop_vf_set_align(open_loop_vf_t *vf, float align_voltage, float align
     vf->align_time    = align_time;
 }
 
+void open_loop_vf_set_target_freq(open_loop_vf_t *vf, float target_freq)
+{
+    if (vf == NULL || !isfinite(target_freq) || target_freq < 0.0f) {
+        return;
+    }
+
+    vf->target_freq = target_freq;
+}
+
 void open_loop_vf_start(open_loop_vf_t *vf)
 {
     if (vf == NULL) {

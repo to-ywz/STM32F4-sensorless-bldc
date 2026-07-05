@@ -30,6 +30,10 @@
 #include "svpwm.h"
 #include "foc_math.h"
 #include "foc_hw_pwm.h"
+#include "comm_uart.h"
+#include "comm_uart_stm32.h"
+#include "comm_vofa.h"
+#include "comm_cmd.h"
 #include <math.h>
 /* USER CODE END Includes */
 
@@ -50,6 +54,14 @@
 #define VF_RATIO        0.05f       /* V/f 比 (V/Hz) */
 #define VF_V_MAX        5.93f       /* 最大电压 (V) = Vdc/√3 */
 #define VF_V_MIN        0.2f        /* 最小电压 (V) */
+
+#define DEBUG_UART_RX_DMA_SIZE   64U
+#define DEBUG_UART_RX_RING_SIZE  128U
+#define DEBUG_UART_TX_RING_SIZE  512U
+#define DEBUG_UART_TX_DMA_SIZE   64U
+#define DEBUG_VOFA_PERIOD_MS     1U
+#define DEBUG_FREQ_MIN_HZ        0.0f
+#define DEBUG_FREQ_MAX_HZ        30.0f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -63,12 +75,27 @@
 static open_loop_vf_t   vf;            /* V/f 控制器实例 */
 static svpwm_output_t   svpwm;         /* SVPWM 实例 */
 static hw_pwm_instance_t hw_pwm;       /* PWM 硬件实例 */
+
+static comm_uart_t       debug_uart;      /* 调试串口抽象对象 */
+static comm_uart_stm32_t debug_uart_drv;  /* STM32 串口适配对象 */
+static comm_vofa_t       debug_vofa;      /* VOFA+ JustFloat 输出对象 */
+static comm_cmd_t        debug_cmd;       /* 串口文本命令解析对象 */
+
+static uint8_t debug_uart_rx_dma_buf[DEBUG_UART_RX_DMA_SIZE];
+static uint8_t debug_uart_rx_ring_buf[DEBUG_UART_RX_RING_SIZE];
+static uint8_t debug_uart_tx_ring_buf[DEBUG_UART_TX_RING_SIZE];
+static uint8_t debug_uart_tx_dma_buf[DEBUG_UART_TX_DMA_SIZE];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 static void vf_self_check(void);
+static void debug_comm_init(void);
+static void debug_comm_task(void);
+static void debug_cmd_start(void *user);
+static void debug_cmd_stop(void *user);
+static void debug_cmd_set_freq(void *user, float freq_hz);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -113,6 +140,9 @@ int main(void)
   MX_ADC3_Init();
   /* USER CODE BEGIN 2 */
 
+  /* 调试串口初始化：USART1 + DMA + VOFA+ JustFloat */
+  debug_comm_init();
+
   /* 控制模块初始化 */
   open_loop_vf_init(&vf, VF_TARGET_FREQ, VF_ACCEL, VF_RATIO, VF_V_MAX, VF_V_MIN);
   /* 预定位参数: 0.5V, 持续 0.5s (保守值，待调试) */
@@ -145,7 +175,6 @@ int main(void)
   /* ADC 偏置校准和母线检查完成后，调用 open_loop_vf_start(&vf) 启动电机。
      当前阶段: 保持 STOP 状态，不自动启动。
      TODO: 需要实现 ADC 偏置校准和母线电压检查。 */
-  open_loop_vf_start(&vf);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -155,6 +184,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    debug_comm_task();
   }
   /* USER CODE END 3 */
 }
@@ -238,6 +268,113 @@ static void vf_self_check(void)
 
     /* 5. 开启 SD */
     hw_pwm_set_sd(1);
+}
+
+/**
+ * @brief 初始化调试串口输出链路
+ *
+ * 当前使用 USART1，发送侧为 ringbuffer + DMA，接收侧为 DMA + IDLE。
+ * VOFA+ 上位机需要选择 JustFloat 协议，波特率 3000000。
+ */
+static void debug_comm_init(void)
+{
+    comm_uart_stm32_config_t uart_cfg = {
+        .huart        = &huart1,
+        .rx_dma_buf   = debug_uart_rx_dma_buf,
+        .rx_dma_size  = DEBUG_UART_RX_DMA_SIZE,
+        .rx_ring_buf  = debug_uart_rx_ring_buf,
+        .rx_ring_size = DEBUG_UART_RX_RING_SIZE,
+        .tx_ring_buf  = debug_uart_tx_ring_buf,
+        .tx_ring_size = DEBUG_UART_TX_RING_SIZE,
+        .tx_dma_buf   = debug_uart_tx_dma_buf,
+        .tx_dma_size  = DEBUG_UART_TX_DMA_SIZE,
+    };
+    comm_cmd_config_t cmd_cfg = {
+        .uart        = &debug_uart,
+        .user        = &vf,
+        .start       = debug_cmd_start,
+        .stop        = debug_cmd_stop,
+        .set_freq    = debug_cmd_set_freq,
+        .freq_min_hz = DEBUG_FREQ_MIN_HZ,
+        .freq_max_hz = DEBUG_FREQ_MAX_HZ,
+    };
+
+    if (comm_uart_stm32_init(&debug_uart, &debug_uart_drv, &uart_cfg) < 0) {
+        Error_Handler();
+    }
+
+    comm_vofa_init(&debug_vofa, &debug_uart);
+
+    if (comm_uart_start_rx(&debug_uart) < 0) {
+        Error_Handler();
+    }
+
+    if (comm_cmd_init(&debug_cmd, &cmd_cfg) < 0) {
+        Error_Handler();
+    }
+}
+
+/**
+ * @brief 周期发送 VOFA+ JustFloat 调试数据
+ *
+ * 通道顺序:
+ *   0 - V/f 当前频率 Hz
+ *   1 - V/f 目标频率 Hz
+ *   2 - V/f 输出电压 V
+ *   3 - V/f 电角度 rad
+ *   4 - V/f 状态枚举
+ *   5 - 最近一次命令状态
+ */
+static void debug_comm_task(void)
+{
+    static uint32_t last_tick;
+    uint32_t now = HAL_GetTick();
+
+    (void)comm_cmd_poll(&debug_cmd);
+
+    if ((uint32_t)(now - last_tick) < DEBUG_VOFA_PERIOD_MS) {
+        return;
+    }
+    last_tick = now;
+
+    float values[6] = {
+        vf.freq,
+        vf.target_freq,
+        vf.v_out,
+        vf.theta_e,
+        (float)open_loop_vf_get_state(&vf),
+        (float)comm_cmd_get_last_status(&debug_cmd),
+    };
+
+    (void)comm_vofa_send_justfloat(&debug_vofa, values, 6U);
+}
+
+/**
+ * @brief 串口命令：启动 V/f 控制
+ * @param user V/f 控制器对象。
+ */
+static void debug_cmd_start(void *user)
+{
+    open_loop_vf_start((open_loop_vf_t *)user);
+}
+
+/**
+ * @brief 串口命令：停止 V/f 控制
+ * @param user V/f 控制器对象。
+ */
+static void debug_cmd_stop(void *user)
+{
+    open_loop_vf_stop((open_loop_vf_t *)user);
+}
+
+/**
+ * @brief 串口命令：设置 V/f 目标频率
+ * @param user    V/f 控制器对象。
+ * @param freq_hz 目标频率，单位 Hz。
+ */
+static void debug_cmd_set_freq(void *user, float freq_hz)
+{
+    open_loop_vf_set_target_freq((open_loop_vf_t *)user, freq_hz);
 }
 
 /**

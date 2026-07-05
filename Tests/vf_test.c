@@ -3,14 +3,14 @@
  * @brief V/F 状态机 PC 端单元测试 (无 printf 依赖)
  * @date 2026-06-29
  *
- * 编译 (PC): gcc -std=c99 -Wall -I Lib\Inc -o Tests\vf_test.exe Tests\vf_test.c Lib\Src\open_loop_vf.c -lm
+ * 编译 (PC): gcc -std=c99 -Wall -I foc\Inc -o Tests\vf_test.exe Tests\vf_test.c foc\Src\open_loop_vf.c -lm
  * 运行: ./Tests\vf_test.exe ; echo $?
  * 返回 0 = 全部通过, 非 0 = 失败数
  */
 
 #include <math.h>
 #include <stddef.h>
-#include "../Lib/Inc/open_loop_vf.h"
+#include "../foc/Inc/open_loop_vf.h"
 
 static int g_pass = 0;
 static int g_fail = 0;
