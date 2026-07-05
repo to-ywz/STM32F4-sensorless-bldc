@@ -57,9 +57,8 @@ Desktop.ini
 
 # 个人笔记
 notes/
-# 测试编译产物
-Tests/*.exe
-Tests/*.o
+# 本地测试目录
+Tests/
 
 # 变更记录 (本地维护)
 CHANGELOG.md
