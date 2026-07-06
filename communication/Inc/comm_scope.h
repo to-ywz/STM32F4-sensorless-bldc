@@ -15,23 +15,23 @@ extern "C" {
 #include "comm_vofa.h"
 #include <stdint.h>
 
-#define SCOPE_MODE_REALTIME_LOW_RATE  1U
-#define SCOPE_MODE_HIGH_RATE_3CH      2U
+#define VOFA_MODE_NORMAL              1U
+#define VOFA_MODE_SCOPE               2U
 
-#define SCOPE_MAX_CHANNELS            20U
-#define SCOPE_HIGH_RATE_CHANNELS      3U
+#define VOFA_NORMAL_MAX_CHANNELS      20U
+#define VOFA_SCOPE_MAX_CHANNELS       3U
 
 typedef struct {
     comm_vofa_t *vofa;
     uint8_t      mode;
-    uint32_t     low_rate_period_ms;
+    uint32_t     normal_period_ms;
     uint32_t     last_tick_ms;
 } comm_scope_t;
 
 typedef struct {
     comm_vofa_t *vofa;
     uint8_t      mode;
-    uint32_t     low_rate_period_ms;
+    uint32_t     normal_period_ms;
 } comm_scope_config_t;
 
 /**
@@ -50,25 +50,28 @@ int comm_scope_init(comm_scope_t *scope, const comm_scope_config_t *config);
 uint8_t comm_scope_get_mode(const comm_scope_t *scope);
 
 /**
- * @brief  低速多通道输出任务。
+ * @brief  普通监控输出任务。
  * @param  scope   调试示波对象。
  * @param  now_ms  当前系统时间，单位 ms。
  * @param  values  float 通道数组。
- * @param  count   通道数量，最大 SCOPE_MAX_CHANNELS。
+ * @param  count   通道数量，最大 VOFA_NORMAL_MAX_CHANNELS。
  * @return 0 表示成功或未到发送周期，负数表示失败。
  */
-int comm_scope_poll_low_rate(comm_scope_t *scope,
-                             uint32_t now_ms,
-                             const float *values,
-                             uint8_t count);
+int comm_scope_poll_normal(comm_scope_t *scope,
+                           uint32_t now_ms,
+                           const float *values,
+                           uint8_t count);
 
 /**
- * @brief  高速 3 通道输出。
+ * @brief  示波输出。
  * @param  scope  调试示波对象。
- * @param  values 3 个 float 通道。
+ * @param  values float 通道数组。
+ * @param  count  通道数量，最大 VOFA_SCOPE_MAX_CHANNELS。
  * @return 0 表示成功，负数表示失败。
  */
-int comm_scope_send_high_rate_3ch(comm_scope_t *scope, const float *values);
+int comm_scope_send_scope(comm_scope_t *scope,
+                          const float *values,
+                          uint8_t count);
 
 #ifdef __cplusplus
 }

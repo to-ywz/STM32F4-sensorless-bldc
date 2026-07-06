@@ -105,10 +105,10 @@
 
 VOFA+ 使用 JustFloat 协议，当前支持两种输出配置：
 
-- `SCOPE_MODE_REALTIME_LOW_RATE`：低速多通道实时输出，最多 20 通道，默认 1kHz。
-- `SCOPE_MODE_HIGH_RATE_3CH`：高速 3 通道 PWM 同步输出，随 16kHz 控制中断输出。该模式当前会导致 VOFA+ 卡死，暂不启用，后续改为分频输出或触发捕获。
+- `VOFA_MODE_NORMAL`：普通监控模式，最多 20 通道，默认 1kHz。
+- `VOFA_MODE_SCOPE`：示波模式，当前 3 通道，随 16kHz 控制中断采样发送。该模式当前会导致 VOFA+ 卡死，暂不启用，后续改为分频输出或触发捕获。
 
-低速多通道模式当前输出通道为：
+普通监控模式当前输出通道为：
 
 | 通道 | 含义 | 单位 |
 |---|---|---|
@@ -124,7 +124,12 @@ VOFA+ 使用 JustFloat 协议，当前支持两种输出配置：
 | 9 | SVPWM 扇区 | - |
 | 10-19 | 预留 | - |
 
-当前输出配置由 `Core/Src/main.c` 中的 `SCOPE_MODE` 控制。
+当前默认输出配置由 `Core/Src/main.c` 中的 `VOFA_OUTPUT_MODE` 控制。
+
+应用层输出模板位于 `Core/Src/app_debug.c`：
+
+- `app_debug_fill_vofa_normal()`：填充普通监控模式通道，后续可直接在此函数中增删变量，或改为传入外部数组。
+- `app_debug_fill_vofa_scope_pwm()`：填充示波模式通道，当前为 `cmp_a/cmp_b/cmp_c`，后续可替换为三相电流、`Ud/Uq/theta` 等 PWM 同步变量。
 
 ### 文本命令输入
 
@@ -144,20 +149,20 @@ freq 17.0
 
 ### 测试步骤
 
-1. 测试低速多通道模式
+1. 测试普通监控模式
 
 确认 `Core/Src/main.c` 中配置为：
 
 ```c
-#define SCOPE_MODE  SCOPE_MODE_REALTIME_LOW_RATE
-#define SCOPE_LOW_RATE_PERIOD_MS  1U
+#define VOFA_OUTPUT_MODE       VOFA_MODE_NORMAL
+#define VOFA_NORMAL_PERIOD_MS  1U
 ```
 
 VOFA+ 选择 JustFloat，串口参数为 `3000000, 8N1`。连接后应看到 20 个通道，其中 0-9 为当前有效通道，10-19 为预留通道。
 
 2. 测试文本命令输入
 
-在低速多通道模式下发送：
+在普通监控模式下发送：
 
 ```text
 freq 10
@@ -173,14 +178,14 @@ stop
 | `start` | 通道 4 从 STOP 进入 ALIGN/RAMP/RUN |
 | `stop` | 通道 4 回到 STOP，通道 0 回到 0 |
 
-3. 测试高速 3 通道模式
+3. 测试示波模式
 
 当前保留该模式作为后续设计入口，暂不建议启用。实测 VOFA+ 在 3 通道 16kHz 连续 JustFloat 输出下会卡死，后续需要改为 `16kHz 同步采样 + 分频输出`，或改为 RAM 触发捕获后再慢速发送。
 
 将 `Core/Src/main.c` 中配置改为：
 
 ```c
-#define SCOPE_MODE  SCOPE_MODE_HIGH_RATE_3CH
+#define VOFA_OUTPUT_MODE  VOFA_MODE_SCOPE
 ```
 
 重新编译烧录。该模式只输出 3 个通道：
@@ -193,9 +198,9 @@ stop
 
 该输出在 ADC 注入转换完成回调中调用，和 16kHz PWM 控制周期同步。
 
-4. 高速模式下测试输入
+4. 示波模式下测试输入
 
-高速模式下仍支持 `start`、`stop`、`freq x` 输入，但该模式下串口输出接近 3Mbps 上限，建议只偶尔发送命令，不要连续刷命令。
+示波模式下仍支持 `start`、`stop`、`freq x` 输入，但该模式下串口输出接近 3Mbps 上限，建议只偶尔发送命令，不要连续刷命令。
 
 若高速模式下 VOFA+ 卡顿、丢帧或曲线异常，优先判断为串口链路或上位机吞吐不足。可临时降低输出频率或改回低速多通道模式验证控制逻辑。
 
@@ -232,7 +237,7 @@ stop
 ## 当前问题
 
 - **过流保护触发**：电机可驱动但加速过程中驱动板过流灯闪烁，怀疑 accel=10 Hz/s 过快导致滑差过大，待降低加速度验证
-- **高速示波输出卡死**：`SCOPE_MODE_HIGH_RATE_3CH` 以 16kHz 连续输出 3 通道 JustFloat 时，VOFA+ 会卡死。该模式暂不启用，后续改为分频输出或触发捕获模式。
+- **高速示波输出卡死**：`VOFA_MODE_SCOPE` 以 16kHz 连续输出 3 通道 JustFloat 时，VOFA+ 会卡死。该模式暂不启用，后续改为分频输出或触发捕获模式。
 
 ## 许可证
 

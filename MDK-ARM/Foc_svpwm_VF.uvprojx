@@ -537,6 +537,11 @@
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32f4xx_hal_msp.c</FilePath>
             </File>
+            <File>
+              <FileName>app_debug.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/app_debug.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

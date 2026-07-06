@@ -28,15 +28,15 @@
 
 ## 当前调试输出
 
-`Core/Src/main.c` 已接入 USART1 调试输出，当前通过 `SCOPE_MODE` 选择输出配置。
+`Core/Src/main.c` 已接入 USART1 调试输出，当前通过 `VOFA_OUTPUT_MODE` 选择输出配置。
 
-### 低速多通道模式
+### 普通监控模式
 
 ```c
-#define SCOPE_MODE  SCOPE_MODE_REALTIME_LOW_RATE
+#define VOFA_OUTPUT_MODE  VOFA_MODE_NORMAL
 ```
 
-该模式在主循环中按 `SCOPE_LOW_RATE_PERIOD_MS` 周期发送，当前默认 1ms，最多 20 通道：
+该模式在主循环中按 `VOFA_NORMAL_PERIOD_MS` 周期发送，当前默认 1ms，最多 20 通道：
 
 | 通道 | 含义 | 单位 |
 |---|---|---|
@@ -54,10 +54,10 @@
 
 20 通道 JustFloat 每帧 84 字节，1kHz 输出约 840kbps，适合 3Mbps 串口长期观察。
 
-### 高速 3 通道模式
+### 示波模式
 
 ```c
-#define SCOPE_MODE  SCOPE_MODE_HIGH_RATE_3CH
+#define VOFA_OUTPUT_MODE  VOFA_MODE_SCOPE
 ```
 
 当前该模式仅作为后续设计入口，暂不建议启用。实测 VOFA+ 在 3 通道 16kHz 连续 JustFloat 输出下会卡死，后续需要改为分频输出或触发捕获。
@@ -72,6 +72,11 @@
 | 2 | PWM C 相比较值 `cmp_c` | tick |
 
 3 通道 JustFloat 每帧 16 字节，16kHz 输出约 2.56Mbps，已经接近 3Mbps 串口的实用上限。
+
+应用层输出模板位于 `Core/Src/app_debug.c`：
+
+- `app_debug_fill_vofa_normal()`：填充普通监控模式通道。
+- `app_debug_fill_vofa_scope_pwm()`：填充示波模式通道。
 
 VOFA+ 配置为 JustFloat，串口参数为 3000000、8N1。
 
