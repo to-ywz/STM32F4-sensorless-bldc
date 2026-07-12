@@ -1,0 +1,95 @@
+/**
+ * @file    app_measurement.h
+ * @brief   相电压与母线电压测量应用模块。
+ */
+
+#ifndef APP_MEASUREMENT_H
+#define APP_MEASUREMENT_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <stdint.h>
+
+/**
+ * @brief ADC3 测量换算配置。
+ */
+typedef struct {
+    float adc_vref;
+    float adc_max_count;
+    uint16_t vrefint_cal_raw;
+    float vrefint_cal_v;
+    float bemf_offset_v;
+    float bemf_scale;
+    float vbus_offset_v;
+    float vbus_scale;
+} app_measurement_config_t;
+
+/**
+ * @brief 一次相电压与母线电压测量结果。
+ */
+typedef struct {
+    uint16_t bemf_u_raw;
+    uint16_t bemf_v_raw;
+    uint16_t bemf_w_raw;
+    uint16_t vbus_raw;
+    float bemf_u_v;
+    float bemf_v_v;
+    float bemf_w_v;
+    float vbus_v;
+    float bemf_u_adc_v;
+    float bemf_v_adc_v;
+    float bemf_w_adc_v;
+    float vbus_adc_v;
+    float vdda_v;
+    uint16_t vrefint_raw;
+} app_measurement_sample_t;
+
+/**
+ * @brief 相电压与母线电压测量对象。
+ *
+ * 原始值由 ADC 中断更新，主循环通过 getter 读取。
+ */
+typedef struct {
+    app_measurement_config_t config;
+    volatile uint32_t sequence;
+    volatile uint16_t bemf_u_raw;
+    volatile uint16_t bemf_v_raw;
+    volatile uint16_t bemf_w_raw;
+    volatile uint16_t vbus_raw;
+    volatile uint16_t vrefint_raw;
+} app_measurement_t;
+
+/**
+ * @brief 初始化测量对象。
+ */
+int app_measurement_init(app_measurement_t *measurement,
+                         const app_measurement_config_t *config);
+
+/**
+ * @brief 更新一次 ADC3 注入序列结果。
+ */
+void app_measurement_update(app_measurement_t *measurement,
+                            uint16_t bemf_u_raw,
+                            uint16_t bemf_v_raw,
+                            uint16_t bemf_w_raw,
+                            uint16_t vbus_raw);
+
+/**
+ * @brief 更新一次 VREFINT 原始采样值。
+ */
+void app_measurement_update_vrefint(app_measurement_t *measurement,
+                                    uint16_t vrefint_raw);
+
+/**
+ * @brief 获取最近一次测量结果并完成电压换算。
+ */
+int app_measurement_get(const app_measurement_t *measurement,
+                        app_measurement_sample_t *sample);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* APP_MEASUREMENT_H */

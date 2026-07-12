@@ -20,9 +20,15 @@ static uint8_t app_debug_fill_vofa_normal(app_debug_t *debug,
 {
     uint8_t i;
 
+    app_measurement_sample_t measurement;
+
     if (debug == NULL || debug->vf == NULL || debug->svpwm == NULL ||
-        debug->cmd == NULL || values == NULL ||
+        debug->cmd == NULL || debug->measurement == NULL || values == NULL ||
         max_count < VOFA_NORMAL_MAX_CHANNELS) {
+        return 0U;
+    }
+
+    if (app_measurement_get(debug->measurement, &measurement) < 0) {
         return 0U;
     }
 
@@ -40,6 +46,16 @@ static uint8_t app_debug_fill_vofa_normal(app_debug_t *debug,
     values[7] = (float)debug->svpwm->pwm.cmp_b;
     values[8] = (float)debug->svpwm->pwm.cmp_c;
     values[9] = (float)debug->svpwm->sector;
+    values[10] = measurement.bemf_u_v;
+    values[11] = measurement.bemf_v_v;
+    values[12] = measurement.bemf_w_v;
+    values[13] = measurement.vbus_v;
+    values[14] = measurement.bemf_u_adc_v;
+    values[15] = measurement.bemf_v_adc_v;
+    values[16] = measurement.bemf_w_adc_v;
+    values[17] = measurement.vbus_adc_v;
+    values[18] = measurement.vdda_v;
+    values[19] = (float)measurement.vrefint_raw;
 
     return VOFA_NORMAL_MAX_CHANNELS;
 }
@@ -70,7 +86,7 @@ int app_debug_init(app_debug_t *debug, const app_debug_config_t *config)
 {
     if (debug == NULL || config == NULL || config->vf == NULL ||
         config->svpwm == NULL || config->cmd == NULL ||
-        config->scope == NULL) {
+        config->scope == NULL || config->measurement == NULL) {
         return -1;
     }
 
@@ -78,6 +94,7 @@ int app_debug_init(app_debug_t *debug, const app_debug_config_t *config)
     debug->svpwm = config->svpwm;
     debug->cmd   = config->cmd;
     debug->scope = config->scope;
+    debug->measurement = config->measurement;
 
     return 0;
 }

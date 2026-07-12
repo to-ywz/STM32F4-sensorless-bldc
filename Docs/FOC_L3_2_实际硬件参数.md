@@ -119,16 +119,58 @@ dt = 1 / 16000 = 62.5 us
 
 ### 6.2 相电压与母线电压
 
-当前 ADC3 注入通道配置如下。
+当前 ADC3 注入通道配置如下。根据配套原理图，PF6~PF8 是三相相电压（BEMF）反馈，PF9 是母线电压反馈。
 
 | 信号 | 引脚 | ADC | 通道 | 注入 Rank |
 |---|---|---|---:|---:|
-| PHASE_U_VOLT | PF6 | ADC3 | IN4 | 1 |
-| PHASE_V_VOLT | PF7 | ADC3 | IN5 | 2 |
-| PHASE_W_VOLT | PF8 | ADC3 | IN6 | 3 |
-| VBUS | PF9 | ADC3 | IN7 | 4 |
+| BEMF_U_ADC | PF6 | ADC3 | IN4 | 1 |
+| BEMF_V_ADC | PF7 | ADC3 | IN5 | 2 |
+| BEMF_W_ADC | PF8 | ADC3 | IN6 | 3 |
+| VBUS_ADC | PF9 | ADC3 | IN7 | 4 |
 
-当前 `main.c` 只启动了 ADC1 注入中断，ADC3 的采样链路后续再接入。
+ADC3 与 ADC1 使用相同的 TIM1 CC4 触发源。`main.c` 已启动 ADC3 注入中断，并在回调中保存四路原始值；应用层再完成电压换算并送入 VOFA+。
+
+原理图中三相 BEMF 和母线电压的换算关系为：
+
+```text
+Motor_EMFU = Motor_U / 37
+Motor_EMFV = Motor_V / 37
+Motor_EMFW = Motor_W / 37
+Motor_VBUS_ADC = POWER / 37 + 1.24 V
+Motor_EMF*_ADC = Motor_EMF* + 1.24 V
+```
+
+当前 ADC 为 12 位，VDDA 通过 ADC1 注入 Rank 4 的内部 VREFINT 动态计算：
+
+```text
+VDDA = VREFINT_CAL × VREFINT_CAL_V / VREFINT_ADC原始值
+ADC电压 = ADC原始值 × VDDA / 4095
+实际相电压或 BEMF = (ADC电压 - 1.24) × 37
+实际母线电压 = (ADC电压 - 1.24) × 37
+```
+
+VOFA+ 正常模式新增通道：
+
+| 通道 | 含义 | 单位 |
+|---:|---|---|
+| 10 | U 相 BEMF / 相电压 | V |
+| 11 | V 相 BEMF / 相电压 | V |
+| 12 | W 相 BEMF / 相电压 | V |
+| 13 | 母线电压 | V |
+| 14 | U 相 ADC 引脚电压 | V |
+| 15 | V 相 ADC 引脚电压 | V |
+| 16 | W 相 ADC 引脚电压 | V |
+| 17 | VBUS ADC 引脚电压 | V |
+| 18 | 由 VREFINT 计算的实时 VDDA | V |
+| 19 | VREFINT 原始 ADC 值 | count |
+
+原理图标注 `Motor_VBUS_ADC = POWER / 37 + 1.24 V`。但当前实测母线为 12.3 V、PF9 ADC 引脚为 1.77~1.78 V，而理论值应为约 1.572 V，存在以下待排查差异：
+
+```text
+12.3 / 37 + 1.24 ≈ 1.572 V
+```
+
+当前代码仍按原理图使用 ×37。该差异解决前，不应将经验比例用于过压保护；需要复核板上 VBUS 分压电阻、PF9 网络和 ADC 参考电压。
 
 ## 7. 当前 V/f 调试参数
 
@@ -153,7 +195,7 @@ dt = 1 / 16000 = 62.5 us
 2. 初始化 V/f、SVPWM、PWM 硬件适配层。
 3. 执行 `vf_self_check()`：SD 关闭、输出 50% 占空比波形、短暂开启 PWM 供示波器观察、再关闭。
 4. 启动 TIM1 Base。
-5. 启动 ADC1 注入中断，触发源为 TIM1 CC4。
+5. 启动 ADC1 和 ADC3 注入中断，触发源均为 TIM1 CC4。
 6. 使能 PWM 输出。
 7. 调用 `open_loop_vf_start(&vf)`，进入 ALIGN/RAMP/RUN 状态机。
 8. ADC1 注入转换完成回调中执行控制链路：
@@ -171,6 +213,6 @@ open_loop_vf_step()
 - 用万用表或示波器确认 PA5 的 SD 使能极性是否与驱动板实际一致。
 - 旧文档中 PA8/PA7、PG10 等记录需要在硬件确认后统一修正。
 - 补 ADC1 三相电流零点校准：空载、PWM 关闭或零矢量时采样，记录 offset。
-- 补 ADC3 VBUS 采样启停和电压换算。
+- 已接入 ADC3 三相 BEMF、母线电压采样启停和电压换算；后续需要通过实测电压校验偏置和比例。
 - 将板级 PWM 适配层逐步改成统一接口，例如 `pwm_hw_stm32`，让算法库不依赖 STM32 HAL。
 - 后续如硬件允许，优先考虑将故障信号接入 TIM1 BKIN，实现硬件级关断。

@@ -36,6 +36,8 @@
 #include "comm_cmd.h"
 #include "comm_scope.h"
 #include "app_debug.h"
+#include "app_measurement.h"
+#include "stm32f4xx_ll_adc.h"
 #include <math.h>
 /* USER CODE END Includes */
 
@@ -64,6 +66,13 @@
 #define DEBUG_FREQ_MIN_HZ        0.0f
 #define DEBUG_FREQ_MAX_HZ        30.0f
 
+#define ADC_VREF                 3.0f
+#define ADC_MAX_COUNT            4095.0f
+#define BEMF_OFFSET_V            1.27f
+#define BEMF_SCALE               37.0f
+#define VBUS_OFFSET_V            1.27f
+#define VBUS_SCALE               37.0f       /* 原理图：POWER / 37 + 1.24V */
+
 /* TODO: VOFA Scope 直出会导致 VOFA+ 卡死，后续改为分频输出或触发捕获。 */
 #define VOFA_OUTPUT_MODE              VOFA_MODE_NORMAL
 #define VOFA_NORMAL_PERIOD_MS         1U
@@ -87,6 +96,8 @@ static comm_vofa_t       debug_vofa;      /* VOFA+ JustFloat 输出对象 */
 static comm_cmd_t        debug_cmd;       /* 串口文本命令解析对象 */
 static comm_scope_t      debug_scope;     /* 调试示波输出对象 */
 static app_debug_t       app_debug;       /* 应用层调试模板对象 */
+
+static app_measurement_t app_measurement;
 
 static uint8_t debug_uart_rx_dma_buf[DEBUG_UART_RX_DMA_SIZE];
 static uint8_t debug_uart_rx_ring_buf[DEBUG_UART_RX_RING_SIZE];
@@ -142,6 +153,21 @@ int main(void)
   MX_TIM6_Init();
   MX_USART1_UART_Init();
   MX_ADC3_Init();
+
+  app_measurement_config_t measurement_cfg = {
+      .adc_vref       = ADC_VREF,
+      .adc_max_count  = ADC_MAX_COUNT,
+      .vrefint_cal_raw = *VREFINT_CAL_ADDR,
+      .vrefint_cal_v  = (float)VREFINT_CAL_VREF / 1000.0f,
+      .bemf_offset_v  = BEMF_OFFSET_V,
+      .bemf_scale     = BEMF_SCALE,
+      .vbus_offset_v  = VBUS_OFFSET_V,
+      .vbus_scale     = VBUS_SCALE,
+  };
+  if (app_measurement_init(&app_measurement, &measurement_cfg) < 0) {
+      Error_Handler();
+  }
+
   /* USER CODE BEGIN 2 */
 
   /* 调试串口初始化：USART1 + DMA + VOFA+ JustFloat */
@@ -172,6 +198,7 @@ int main(void)
 
   /* 启动 ADC 注入转换，TIM1 CC4 触发 */
   HAL_ADCEx_InjectedStart_IT(&hadc1);
+  HAL_ADCEx_InjectedStart_IT(&hadc3);
 
   /* 使能 PWM 输出 (SD = 高) */
   hw_pwm_enable(&hw_pwm);
@@ -268,6 +295,7 @@ static void vf_self_check(void)
     /* 4. 关闭输出，停止 ADC 中断 */
     hw_pwm_disable(&hw_pwm);
     HAL_ADCEx_InjectedStop_IT(&hadc1);
+    HAL_ADCEx_InjectedStop_IT(&hadc3);
     HAL_Delay(100);
 
     /* 5. 开启 SD */
@@ -312,6 +340,7 @@ static void debug_comm_init(void)
         .svpwm = &svpwm,
         .cmd   = &debug_cmd,
         .scope = &debug_scope,
+        .measurement = &app_measurement,
     };
 
     if (comm_uart_stm32_init(&debug_uart, &debug_uart_drv, &uart_cfg) < 0) {
@@ -356,6 +385,24 @@ static void debug_comm_task(void)
  */
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
+    if (hadc->Instance == ADC3) {
+        uint16_t bemf_u_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
+            hadc, ADC_INJECTED_RANK_1);
+        uint16_t bemf_v_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
+            hadc, ADC_INJECTED_RANK_2);
+        uint16_t bemf_w_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
+            hadc, ADC_INJECTED_RANK_3);
+        uint16_t vbus_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
+            hadc, ADC_INJECTED_RANK_4);
+
+        app_measurement_update(&app_measurement,
+                               bemf_u_raw,
+                               bemf_v_raw,
+                               bemf_w_raw,
+                               vbus_raw);
+        return;
+    }
+
     if (hadc->Instance != ADC1)
         return;
 
@@ -363,6 +410,10 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     (void)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_1);
     (void)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_2);
     (void)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_3);
+    app_measurement_update_vrefint(
+        &app_measurement,
+        (uint16_t)HAL_ADCEx_InjectedGetValue(
+            hadc, ADC_INJECTED_RANK_4));
 
     float dt = 1.0f / (float)PWM_FREQ;     /* 控制周期 62.5μs */
 

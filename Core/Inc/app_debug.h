@@ -14,6 +14,7 @@ extern "C" {
 
 #include "comm_cmd.h"
 #include "comm_scope.h"
+#include "app_measurement.h"
 #include "open_loop_vf.h"
 #include "svpwm.h"
 #include <stdint.h>
@@ -23,6 +24,7 @@ typedef struct {
     svpwm_output_t  *svpwm;
     comm_cmd_t      *cmd;
     comm_scope_t    *scope;
+    app_measurement_t *measurement;
 } app_debug_t;
 
 typedef struct {
@@ -30,6 +32,7 @@ typedef struct {
     svpwm_output_t  *svpwm;
     comm_cmd_t      *cmd;
     comm_scope_t    *scope;
+    app_measurement_t *measurement;
 } app_debug_config_t;
 
 /**
