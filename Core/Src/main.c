@@ -51,6 +51,7 @@
 #define VDC             12.0f       /* 母线电压 (V) */
 #define PWM_FREQ        16000       /* PWM 频率 (Hz) */
 #define PWM_PERIOD      5249        /* TIM1 ARR 值 */
+#define ADC_TRIGGER_TICKS ((PWM_PERIOD * 3U + 2U) / 4U) /* 50% PWM 导通区中部 */
 #define DEAD_TIME_US    1.0f        /* 死区时间 (us) */
 
 #define VF_TARGET_FREQ  17.0f       /* 目标频率 (Hz) */
@@ -68,14 +69,16 @@
 
 #define ADC_VREF                 3.0f
 #define ADC_MAX_COUNT            4095.0f
-#define BEMF_OFFSET_V            1.27f
+#define BEMF_OFFSET_V            1.26f
 #define BEMF_SCALE               37.0f
-#define VBUS_OFFSET_V            1.27f
+#define VBUS_OFFSET_V            1.26f
 #define VBUS_SCALE               37.0f       /* 原理图：POWER / 37 + 1.24V */
 
 /* TODO: VOFA Scope 直出会导致 VOFA+ 卡死，后续改为分频输出或触发捕获。 */
 #define VOFA_OUTPUT_MODE              VOFA_MODE_NORMAL
 #define VOFA_NORMAL_PERIOD_MS         1U
+#define CURRENT_ZERO_CALIBRATION_SAMPLES  2048U
+#define CURRENT_ZERO_CALIBRATION_TIMEOUT_MS  250U
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -111,6 +114,7 @@ void SystemClock_Config(void);
 static void vf_self_check(void);
 static void debug_comm_init(void);
 static void debug_comm_task(void);
+static int current_zero_calibration(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -159,6 +163,9 @@ int main(void)
       .adc_max_count  = ADC_MAX_COUNT,
       .vrefint_cal_raw = *VREFINT_CAL_ADDR,
       .vrefint_cal_v  = (float)VREFINT_CAL_VREF / 1000.0f,
+      .current_offset_v = 1.27f,
+      .current_shunt_ohm = 0.02f,
+      .current_amplifier_gain = 8.0f,
       .bemf_offset_v  = BEMF_OFFSET_V,
       .bemf_scale     = BEMF_SCALE,
       .vbus_offset_v  = VBUS_OFFSET_V,
@@ -184,7 +191,7 @@ int main(void)
       .htim              = &htim1,
       .timer_clk_hz      = 168000000U,
       .period_ticks      = PWM_PERIOD,
-      .adc_trigger_ticks = (PWM_PERIOD + 1U) / 2U,
+      .adc_trigger_ticks = ADC_TRIGGER_TICKS,
       .dead_time_us      = DEAD_TIME_US,
       .v_dc              = VDC,
   };
@@ -199,6 +206,11 @@ int main(void)
   /* 启动 ADC 注入转换，TIM1 CC4 触发 */
   HAL_ADCEx_InjectedStart_IT(&hadc1);
   HAL_ADCEx_InjectedStart_IT(&hadc3);
+
+  /* 驱动器保持关闭，只启动 CH4 触发 ADC，完成三相电流零点标定。 */
+  if (current_zero_calibration() < 0) {
+      Error_Handler();
+  }
 
   /* 使能 PWM 输出 (SD = 高) */
   hw_pwm_enable(&hw_pwm);
@@ -383,6 +395,39 @@ static void debug_comm_task(void)
  *
  * @param  hadc : ADC 句柄
  */
+/**
+ * @brief 在驱动器关闭时采集三相电流零点。
+ *
+ * 仅打开 TIM1 CH4 作为 ADC 触发源，不打开三相 PWM 和驱动器 SD。
+ */
+static int current_zero_calibration(void)
+{
+    uint32_t start_tick;
+
+    app_measurement_start_current_zero_calibration(
+        &app_measurement, CURRENT_ZERO_CALIBRATION_SAMPLES);
+
+    if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4) != HAL_OK) {
+        return -1;
+    }
+
+    start_tick = HAL_GetTick();
+    while (!app_measurement_is_current_zero_calibration_done(
+               &app_measurement)) {
+        debug_comm_task();
+        if ((uint32_t)(HAL_GetTick() - start_tick) >=
+            CURRENT_ZERO_CALIBRATION_TIMEOUT_MS) {
+            HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_4);
+            return -2;
+        }
+    }
+
+    HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_4);
+
+    return app_measurement_apply_current_zero_calibration(
+        &app_measurement);
+}
+
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     if (hadc->Instance == ADC3) {
@@ -407,9 +452,16 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         return;
 
     /* 读取注入转换结果（当前未使用，预留电流反馈） */
-    (void)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_1);
-    (void)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_2);
-    (void)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_3);
+    uint16_t current_u_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
+        hadc, ADC_INJECTED_RANK_1);
+    uint16_t current_v_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
+        hadc, ADC_INJECTED_RANK_2);
+    uint16_t current_w_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
+        hadc, ADC_INJECTED_RANK_3);
+    app_measurement_update_current(&app_measurement,
+                                   current_u_raw,
+                                   current_v_raw,
+                                   current_w_raw);
     app_measurement_update_vrefint(
         &app_measurement,
         (uint16_t)HAL_ADCEx_InjectedGetValue(

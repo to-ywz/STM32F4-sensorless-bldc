@@ -10,7 +10,7 @@
 | V 相 BEMF / 相电压 | PF7 / ADC3_IN5 | 已接入 ADC3 注入采样和 VOFA+ |
 | W 相 BEMF / 相电压 | PF8 / ADC3_IN6 | 已接入 ADC3 注入采样和 VOFA+ |
 | 母线电压 | PF9 / ADC3_IN7 | 已接入 ADC3 注入采样和 VOFA+ |
-| U/V/W 三相电流 | PA3/PA4/PA6 / ADC1 | ADC 已配置，软件尚未完成电流换算 |
+| U/V/W 三相电流 | PA3/PA4/PA6 / ADC1 | 已接入 VOFA+，标定分支启动时自动校准零点 |
 
 ADC3 四个 Rank 使用 TIM1 CC4 触发，采样结果由 ADC3 注入回调保存，应用层完成电压换算。
 

@@ -36,26 +36,26 @@ static uint8_t app_debug_fill_vofa_normal(app_debug_t *debug,
         values[i] = 0.0f;
     }
 
-    values[0] = debug->vf->freq;
-    values[1] = debug->vf->target_freq;
-    values[2] = debug->vf->v_out;
-    values[3] = debug->vf->theta_e;
-    values[4] = (float)open_loop_vf_get_state(debug->vf);
-    values[5] = (float)comm_cmd_get_last_status(debug->cmd);
-    values[6] = (float)debug->svpwm->pwm.cmp_a;
-    values[7] = (float)debug->svpwm->pwm.cmp_b;
-    values[8] = (float)debug->svpwm->pwm.cmp_c;
-    values[9] = (float)debug->svpwm->sector;
-    values[10] = measurement.bemf_u_v;
-    values[11] = measurement.bemf_v_v;
-    values[12] = measurement.bemf_w_v;
-    values[13] = measurement.vbus_v;
-    values[14] = measurement.bemf_u_adc_v;
-    values[15] = measurement.bemf_v_adc_v;
-    values[16] = measurement.bemf_w_adc_v;
-    values[17] = measurement.vbus_adc_v;
-    values[18] = measurement.vdda_v;
-    values[19] = (float)measurement.vrefint_raw;
+    values[0] = measurement.current_u_a;
+    values[1] = measurement.current_v_a;
+    values[2] = measurement.current_w_a;
+    values[3] = measurement.current_u_adc_v;
+    values[4] = measurement.current_v_adc_v;
+    values[5] = measurement.current_w_adc_v;
+    values[6] = measurement.bemf_u_v;
+    values[7] = measurement.bemf_v_v;
+    values[8] = measurement.bemf_w_v;
+    values[9] = measurement.vbus_v;
+    values[10] = measurement.bemf_u_adc_v;
+    values[11] = measurement.bemf_v_adc_v;
+    values[12] = measurement.bemf_w_adc_v;
+    values[13] = measurement.vbus_adc_v;
+    values[14] = measurement.vdda_v;
+    values[15] = (float)measurement.vrefint_raw;
+    values[16] = debug->vf->freq;
+    values[17] = debug->vf->v_out;
+    values[18] = (float)debug->svpwm->pwm.cmp_a;
+    values[19] = (float)debug->svpwm->pwm.cmp_b;
 
     return VOFA_NORMAL_MAX_CHANNELS;
 }

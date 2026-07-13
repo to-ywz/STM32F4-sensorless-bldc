@@ -21,7 +21,7 @@
 #include "usart.h"
 
 /* USER CODE BEGIN 0 */
-#define USART1_DEBUG_BAUDRATE  3000000U
+#define USART1_DEBUG_BAUDRATE  921600U
 
 /* USER CODE END 0 */
 
