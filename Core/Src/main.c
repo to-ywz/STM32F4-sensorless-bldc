@@ -459,6 +459,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     uint16_t current_w_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
         hadc, ADC_INJECTED_RANK_3);
     app_measurement_update_current(&app_measurement,
+                                   svpwm.sector,
                                    current_u_raw,
                                    current_v_raw,
                                    current_w_raw);

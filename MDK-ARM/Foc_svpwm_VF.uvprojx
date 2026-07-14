@@ -719,6 +719,11 @@
               <FilePath>..\foc\Src\foc_math.c</FilePath>
             </File>
             <File>
+              <FileName>foc_current_reconstruct.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\foc\Src\foc_current_reconstruct.c</FilePath>
+            </File>
+            <File>
               <FileName>open_loop_vf.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\foc\Src\open_loop_vf.c</FilePath>

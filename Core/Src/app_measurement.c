@@ -23,6 +23,7 @@ int app_measurement_init(app_measurement_t *measurement,
     measurement->current_u_raw = 0U;
     measurement->current_v_raw = 0U;
     measurement->current_w_raw = 0U;
+    measurement->current_sector = 0U;
     measurement->current_calibration_target = 0U;
     measurement->current_calibration_count = 0U;
     measurement->current_calibration_sum_u = 0U;
@@ -43,6 +44,7 @@ int app_measurement_init(app_measurement_t *measurement,
 }
 
 void app_measurement_update_current(app_measurement_t *measurement,
+                                    uint8_t current_sector,
                                     uint16_t current_u_raw,
                                     uint16_t current_v_raw,
                                     uint16_t current_w_raw)
@@ -55,6 +57,7 @@ void app_measurement_update_current(app_measurement_t *measurement,
     measurement->current_u_raw = current_u_raw;
     measurement->current_v_raw = current_v_raw;
     measurement->current_w_raw = current_w_raw;
+    measurement->current_sector = current_sector;
 
     if (measurement->current_calibration_count <
         measurement->current_calibration_target) {
@@ -152,6 +155,7 @@ int app_measurement_get(const app_measurement_t *measurement,
     uint32_t sequence_end;
     uint16_t vrefint_raw;
     float vdda_v;
+    foc_current_result_t current_result;
 
     if (measurement == NULL || sample == NULL) {
         return -1;
@@ -171,6 +175,7 @@ int app_measurement_get(const app_measurement_t *measurement,
         sample->current_u_raw = measurement->current_u_raw;
         sample->current_v_raw = measurement->current_v_raw;
         sample->current_w_raw = measurement->current_w_raw;
+        sample->current_sector = measurement->current_sector;
         sequence_end = measurement->sequence;
 
         if (sequence_start == sequence_end &&
@@ -211,6 +216,23 @@ int app_measurement_get(const app_measurement_t *measurement,
                           (measurement->config.adc_max_count *
                            measurement->config.current_shunt_ohm *
                            measurement->config.current_amplifier_gain);
+
+    if (foc_current_reconstruct(sample->current_sector,
+                                sample->current_u_a,
+                                sample->current_v_a,
+                                sample->current_w_a,
+                                &current_result) == 0) {
+        sample->current_u_a = current_result.current_u_a;
+        sample->current_v_a = current_result.current_v_a;
+        sample->current_w_a = current_result.current_w_a;
+        sample->current_sum_error_a = current_result.sum_error_a;
+        sample->current_reconstructed = current_result.reconstructed;
+    } else {
+        sample->current_sum_error_a = sample->current_u_a +
+                                      sample->current_v_a +
+                                      sample->current_w_a;
+        sample->current_reconstructed = 0U;
+    }
 
     sample->bemf_u_adc_v = (float)sample->bemf_u_raw *
                            vdda_v / measurement->config.adc_max_count;
