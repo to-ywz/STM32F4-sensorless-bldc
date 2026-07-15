@@ -28,6 +28,7 @@
 /* USER CODE BEGIN Includes */
 #include "open_loop_vf.h"
 #include "svpwm.h"
+#include "svpwm_sector_test.h"
 #include "foc_math.h"
 #include "foc_hw_pwm.h"
 #include "comm_uart.h"
@@ -52,7 +53,7 @@
 #define PWM_FREQ        16000       /* PWM 频率 (Hz) */
 #define PWM_PERIOD      5249        /* TIM1 ARR 值 */
 #define ADC_TRIGGER_TICKS ((PWM_PERIOD * 3U + 2U) / 4U) /* 50% PWM 导通区中部 */
-#define DEAD_TIME_US    1.0f        /* 死区时间 (us) */
+#define DEAD_TIME_US    0.5f        /* 死区时间 (us) */
 
 #define VF_TARGET_FREQ  17.0f       /* 目标频率 (Hz) */
 #define VF_ACCEL        2.0f        /* 加速度 (Hz/s) */
@@ -91,6 +92,7 @@
 /* USER CODE BEGIN PV */
 static open_loop_vf_t   vf;            /* V/f 控制器实例 */
 static svpwm_output_t   svpwm;         /* SVPWM 实例 */
+static svpwm_sector_test_t sector_test; /* 六扇区测试实例 */
 static hw_pwm_instance_t hw_pwm;       /* PWM 硬件实例 */
 
 static comm_uart_t       debug_uart;      /* 调试串口抽象对象 */
@@ -186,6 +188,10 @@ int main(void)
   open_loop_vf_set_align(&vf, 0.5f, 0.5f);
 
   svpwm_init(&svpwm, VDC, PWM_FREQ, PWM_PERIOD);
+
+  if (svpwm_sector_test_init(&sector_test, &svpwm) < 0) {
+      Error_Handler();
+  }
 
   hw_pwm_config_t pwm_cfg = {
       .htim              = &htim1,
@@ -339,6 +345,7 @@ static void debug_comm_init(void)
         .start       = app_debug_cmd_start,
         .stop        = app_debug_cmd_stop,
         .set_freq    = app_debug_cmd_set_freq,
+        .set_sector  = app_debug_cmd_set_sector,
         .freq_min_hz = DEBUG_FREQ_MIN_HZ,
         .freq_max_hz = DEBUG_FREQ_MAX_HZ,
     };
@@ -353,6 +360,7 @@ static void debug_comm_init(void)
         .cmd   = &debug_cmd,
         .scope = &debug_scope,
         .measurement = &app_measurement,
+        .sector_test = &sector_test,
     };
 
     if (comm_uart_stm32_init(&debug_uart, &debug_uart_drv, &uart_cfg) < 0) {
@@ -451,6 +459,21 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     if (hadc->Instance != ADC1)
         return;
 
+    /* PE0 标记 ADC1 注入转换完成回调的处理窗口。 */
+    HAL_GPIO_WritePin(SECTOR_TEST_GPIO_Port,
+                      SECTOR_TEST_Pin,
+                      GPIO_PIN_SET);
+
+    if (svpwm_sector_test_is_active(&sector_test) != 0U) {
+        if (svpwm_sector_test_step(&sector_test) != 0) {
+            hw_pwm_set_duty(&hw_pwm, &sector_test.pwm);
+        }
+        HAL_GPIO_WritePin(SECTOR_TEST_GPIO_Port,
+                          SECTOR_TEST_Pin,
+                          GPIO_PIN_RESET);
+        return;
+    }
+
     /* 读取注入转换结果（当前未使用，预留电流反馈） */
     uint16_t current_u_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
         hadc, ADC_INJECTED_RANK_1);
@@ -467,6 +490,10 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         &app_measurement,
         (uint16_t)HAL_ADCEx_InjectedGetValue(
             hadc, ADC_INJECTED_RANK_4));
+
+    HAL_GPIO_WritePin(SECTOR_TEST_GPIO_Port,
+                      SECTOR_TEST_Pin,
+                      GPIO_PIN_RESET);
 
     float dt = 1.0f / (float)PWM_FREQ;     /* 控制周期 62.5μs */
 

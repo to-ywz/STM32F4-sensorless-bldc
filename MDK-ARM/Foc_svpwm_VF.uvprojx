@@ -724,6 +724,11 @@
               <FilePath>..\foc\Src\foc_current_reconstruct.c</FilePath>
             </File>
             <File>
+              <FileName>svpwm_sector_test.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\foc\Src\svpwm_sector_test.c</FilePath>
+            </File>
+            <File>
               <FileName>open_loop_vf.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\foc\Src\open_loop_vf.c</FilePath>

@@ -39,6 +39,7 @@
 │       ├── pid.c
 │       ├── foc_math.c
 │       ├── foc_current_reconstruct.c # 按扇区选择两相并重构第三相
+│       ├── svpwm_sector_test.c # 六扇区串口测试
 │       ├── svpwm.c
 │       ├── open_loop_vf.c
 │       └── foc_hw_pwm.c
@@ -107,6 +108,24 @@
 ## 串口调试
 
 当前 USART1 用于调试通信，串口参数为 `3000000, 8N1`。
+
+### 六扇区测试分支
+
+当前测试分支 `feature/sector-current-sampling-test` 支持通过串口固定输出六个 SVPWM 扇区：
+
+```text
+sector 1
+sector 2
+sector 3
+sector 4
+sector 5
+sector 6
+sector 0
+```
+
+`sector 1~6` 会停止 V/f 控制，并在下一次 ADC1 注入转换完成回调中更新对应扇区中心矢量。PE0 在每次 ADC1 注入转换完成回调开始时拉高、回调结束时拉低，用于观察 ADC 完成回调处理窗口；`sector 0` 退出测试并恢复 STOP 状态的 50% 占空比。
+
+测试时建议先断开电机或使用限流电源，观察 PE0、三相高低侧 PWM 和 ADC 触发相关时序。PE0 是 ADC 转换完成后的软件标记，不等同于 ADC 硬件采样瞬间，也不能单独代表 ADC 采样保持范围。
 
 ### VOFA+ 输出
 

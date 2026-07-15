@@ -53,6 +53,7 @@ void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(DRIVER_SD_GPIO_Port, DRIVER_SD_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(SECTOR_TEST_GPIO_Port, SECTOR_TEST_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : DRIVER_SD_Pin */
   GPIO_InitStruct.Pin = DRIVER_SD_Pin;
@@ -60,6 +61,13 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(DRIVER_SD_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : SECTOR_TEST_Pin */
+  GPIO_InitStruct.Pin = SECTOR_TEST_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(SECTOR_TEST_GPIO_Port, &GPIO_InitStruct);
 
 }
 

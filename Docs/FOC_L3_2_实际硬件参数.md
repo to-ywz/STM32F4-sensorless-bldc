@@ -45,7 +45,7 @@ TIM1 位于 APB2。APB2 分频不为 1 时，定时器时钟为 APB2 时钟的 2
 | TIM1 ARR / `PWM_PERIOD` | 5249 |
 | TIM1 RepetitionCounter | 1 |
 | PWM 频率 | 16 kHz |
-| 死区时间 | 1.0 us |
+| 死区时间 | 0.5 us（当前测试配置） |
 | PWM 输出极性 | CH/CHN 均为高电平有效 |
 | ARR/CCR 预装载 | ARR 预装载开启；CCR 由 HAL PWM 配置管理 |
 

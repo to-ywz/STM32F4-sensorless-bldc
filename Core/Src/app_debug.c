@@ -86,7 +86,8 @@ int app_debug_init(app_debug_t *debug, const app_debug_config_t *config)
 {
     if (debug == NULL || config == NULL || config->vf == NULL ||
         config->svpwm == NULL || config->cmd == NULL ||
-        config->scope == NULL || config->measurement == NULL) {
+        config->scope == NULL || config->measurement == NULL ||
+        config->sector_test == NULL) {
         return -1;
     }
 
@@ -95,6 +96,7 @@ int app_debug_init(app_debug_t *debug, const app_debug_config_t *config)
     debug->cmd   = config->cmd;
     debug->scope = config->scope;
     debug->measurement = config->measurement;
+    debug->sector_test = config->sector_test;
 
     return 0;
 }
@@ -169,4 +171,16 @@ void app_debug_cmd_set_freq(void *user, float freq_hz)
     }
 
     open_loop_vf_set_target_freq(debug->vf, freq_hz);
+}
+
+void app_debug_cmd_set_sector(void *user, uint8_t sector)
+{
+    app_debug_t *debug = (app_debug_t *)user;
+
+    if (debug == NULL || debug->vf == NULL || debug->sector_test == NULL) {
+        return;
+    }
+
+    open_loop_vf_stop(debug->vf);
+    svpwm_sector_test_set_sector(debug->sector_test, sector);
 }

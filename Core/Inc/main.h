@@ -71,6 +71,8 @@ void Error_Handler(void);
 #define ADC_IV_GPIO_Port GPIOA
 #define DRIVER_SD_Pin GPIO_PIN_5
 #define DRIVER_SD_GPIO_Port GPIOA
+#define SECTOR_TEST_Pin GPIO_PIN_0
+#define SECTOR_TEST_GPIO_Port GPIOE
 #define ADC_IW_Pin GPIO_PIN_6
 #define ADC_IW_GPIO_Port GPIOA
 

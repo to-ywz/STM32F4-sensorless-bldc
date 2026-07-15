@@ -17,6 +17,7 @@ extern "C" {
 #include "app_measurement.h"
 #include "open_loop_vf.h"
 #include "svpwm.h"
+#include "svpwm_sector_test.h"
 #include <stdint.h>
 
 typedef struct {
@@ -25,6 +26,7 @@ typedef struct {
     comm_cmd_t      *cmd;
     comm_scope_t    *scope;
     app_measurement_t *measurement;
+    svpwm_sector_test_t *sector_test;
 } app_debug_t;
 
 typedef struct {
@@ -33,6 +35,7 @@ typedef struct {
     comm_cmd_t      *cmd;
     comm_scope_t    *scope;
     app_measurement_t *measurement;
+    svpwm_sector_test_t *sector_test;
 } app_debug_config_t;
 
 /**
@@ -75,6 +78,8 @@ void app_debug_cmd_stop(void *user);
  * @param freq_hz 目标频率，单位 Hz。
  */
 void app_debug_cmd_set_freq(void *user, float freq_hz);
+
+void app_debug_cmd_set_sector(void *user, uint8_t sector);
 
 #ifdef __cplusplus
 }

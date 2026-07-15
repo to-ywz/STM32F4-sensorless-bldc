@@ -75,10 +75,35 @@ static int comm_cmd_parse_freq(char *arg, float *freq_hz)
     return COMM_CMD_OK;
 }
 
+static int comm_cmd_parse_sector(char *arg, uint8_t *sector)
+{
+    char *end;
+    unsigned long value;
+
+    if (arg == NULL || sector == NULL) {
+        return COMM_CMD_ERR_ARG;
+    }
+
+    arg = comm_cmd_skip_space(arg);
+    value = strtoul(arg, &end, 10);
+    if (end == arg) {
+        return COMM_CMD_ERR_CMD;
+    }
+
+    end = comm_cmd_skip_space(end);
+    if (!comm_cmd_is_line_end(*end) || value > 6UL) {
+        return COMM_CMD_ERR_RANGE;
+    }
+
+    *sector = (uint8_t)value;
+    return COMM_CMD_OK;
+}
+
 static int comm_cmd_exec_line(comm_cmd_t *cmd)
 {
     char *line;
     float freq_hz;
+    uint8_t sector;
 
     if (cmd == NULL) {
         return COMM_CMD_ERR_ARG;
@@ -122,6 +147,18 @@ static int comm_cmd_exec_line(comm_cmd_t *cmd)
         return COMM_CMD_OK;
     }
 
+    if (strncmp(line, "sector", 6U) == 0 && comm_cmd_is_space(line[6])) {
+        int ret = comm_cmd_parse_sector(&line[6], &sector);
+        if (ret < 0) {
+            return ret;
+        }
+
+        if (cmd->set_sector != NULL) {
+            cmd->set_sector(cmd->user, sector);
+        }
+        return COMM_CMD_OK;
+    }
+
     return COMM_CMD_ERR_CMD;
 }
 
@@ -136,6 +173,7 @@ int comm_cmd_init(comm_cmd_t *cmd, const comm_cmd_config_t *config)
     cmd->start       = config->start;
     cmd->stop        = config->stop;
     cmd->set_freq    = config->set_freq;
+    cmd->set_sector  = config->set_sector;
     cmd->freq_min_hz = config->freq_min_hz;
     cmd->freq_max_hz = config->freq_max_hz;
     cmd->line_len    = 0U;

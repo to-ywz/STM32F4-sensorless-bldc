@@ -19,6 +19,7 @@ extern "C" {
 
 typedef void (*comm_cmd_void_cb_t)(void *user);
 typedef void (*comm_cmd_freq_cb_t)(void *user, float freq_hz);
+typedef void (*comm_cmd_sector_cb_t)(void *user, uint8_t sector);
 
 typedef struct {
     comm_uart_t        *uart;
@@ -26,6 +27,7 @@ typedef struct {
     comm_cmd_void_cb_t  start;
     comm_cmd_void_cb_t  stop;
     comm_cmd_freq_cb_t  set_freq;
+    comm_cmd_sector_cb_t set_sector;
     float               freq_min_hz;
     float               freq_max_hz;
 } comm_cmd_config_t;
@@ -36,6 +38,7 @@ typedef struct {
     comm_cmd_void_cb_t  start;
     comm_cmd_void_cb_t  stop;
     comm_cmd_freq_cb_t  set_freq;
+    comm_cmd_sector_cb_t set_sector;
     float               freq_min_hz;
     float               freq_max_hz;
     char                line[COMM_CMD_LINE_SIZE];
