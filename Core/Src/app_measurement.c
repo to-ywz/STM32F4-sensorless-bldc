@@ -19,7 +19,9 @@ int app_measurement_init(app_measurement_t *measurement,
     }
 
     measurement->config = *config;
-    measurement->sequence = 0U;
+    measurement->current_sequence = 0U;
+    measurement->voltage_sequence = 0U;
+    measurement->vref_sequence = 0U;
     measurement->current_u_raw = 0U;
     measurement->current_v_raw = 0U;
     measurement->current_w_raw = 0U;
@@ -53,7 +55,7 @@ void app_measurement_update_current(app_measurement_t *measurement,
         return;
     }
 
-    measurement->sequence++;
+    measurement->current_sequence++;
     measurement->current_u_raw = current_u_raw;
     measurement->current_v_raw = current_v_raw;
     measurement->current_w_raw = current_w_raw;
@@ -66,7 +68,7 @@ void app_measurement_update_current(app_measurement_t *measurement,
         measurement->current_calibration_sum_w += current_w_raw;
         measurement->current_calibration_count++;
     }
-    measurement->sequence++;
+    measurement->current_sequence++;
 }
 
 void app_measurement_start_current_zero_calibration(
@@ -128,12 +130,12 @@ void app_measurement_update(app_measurement_t *measurement,
     }
 
     /* 奇数表示更新中，偶数表示一组采样已经完整写入。 */
-    measurement->sequence++;
+    measurement->voltage_sequence++;
     measurement->bemf_u_raw = bemf_u_raw;
     measurement->bemf_v_raw = bemf_v_raw;
     measurement->bemf_w_raw = bemf_w_raw;
     measurement->vbus_raw = vbus_raw;
-    measurement->sequence++;
+    measurement->voltage_sequence++;
 }
 
 void app_measurement_update_vrefint(app_measurement_t *measurement,
@@ -143,9 +145,9 @@ void app_measurement_update_vrefint(app_measurement_t *measurement,
         return;
     }
 
-    measurement->sequence++;
+    measurement->vref_sequence++;
     measurement->vrefint_raw = vrefint_raw;
-    measurement->sequence++;
+    measurement->vref_sequence++;
 }
 
 int app_measurement_get(const app_measurement_t *measurement,
@@ -162,26 +164,40 @@ int app_measurement_get(const app_measurement_t *measurement,
     }
 
     for (;;) {
-        sequence_start = measurement->sequence;
+        sequence_start = measurement->current_sequence;
         if ((sequence_start & 1U) != 0U) {
             continue;
         }
 
-        sample->bemf_u_raw = measurement->bemf_u_raw;
-        sample->bemf_v_raw = measurement->bemf_v_raw;
-        sample->bemf_w_raw = measurement->bemf_w_raw;
-        sample->vbus_raw = measurement->vbus_raw;
-        sample->vrefint_raw = measurement->vrefint_raw;
         sample->current_u_raw = measurement->current_u_raw;
         sample->current_v_raw = measurement->current_v_raw;
         sample->current_w_raw = measurement->current_w_raw;
         sample->current_sector = measurement->current_sector;
-        sequence_end = measurement->sequence;
+        sequence_end = measurement->current_sequence;
 
         if (sequence_start == sequence_end &&
             (sequence_end & 1U) == 0U) {
             break;
         }
+    }
+
+    for (;;) {
+        sequence_start = measurement->voltage_sequence;
+        if ((sequence_start & 1U) != 0U) { continue; }
+        sample->bemf_u_raw = measurement->bemf_u_raw;
+        sample->bemf_v_raw = measurement->bemf_v_raw;
+        sample->bemf_w_raw = measurement->bemf_w_raw;
+        sample->vbus_raw = measurement->vbus_raw;
+        sequence_end = measurement->voltage_sequence;
+        if (sequence_start == sequence_end && (sequence_end & 1U) == 0U) { break; }
+    }
+
+    for (;;) {
+        sequence_start = measurement->vref_sequence;
+        if ((sequence_start & 1U) != 0U) { continue; }
+        sample->vrefint_raw = measurement->vrefint_raw;
+        sequence_end = measurement->vref_sequence;
+        if (sequence_start == sequence_end && (sequence_end & 1U) == 0U) { break; }
     }
 
     vrefint_raw = sample->vrefint_raw;

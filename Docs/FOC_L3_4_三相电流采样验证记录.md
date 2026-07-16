@@ -1,5 +1,12 @@
 # 三相电流采样验证记录
 
+## ADC 重构后的启动与监控边界
+
+- ADC1 注入 Rank 1~3 固定为 PA3/PA4/PA6 三相电流，由 TIM1_CH4 在 16 kHz PWM 周期内同步触发；零点继续保存为三个独立的原始 ADC 平均值 `current_offset_u_raw`、`current_offset_v_raw`、`current_offset_w_raw`，不改为安培值平均。
+- VREFINT 移至 ADC1 规则组（480 cycles、软件触发）。启动先等待内部参考稳定，连续转换 17 次、丢弃首个结果后平均余下 16 次，并立即调用 `app_measurement_update_vrefint()`；随后 SD 保持关闭并等待 400 ms，才开启 TIM1_CH4 并进行 2048 点电流零点校准。
+- ADC3 当前仅实现 `MONITOR`：四 Rank 规则组的 BEMF_U/V/W 与 VBUS 以 1 kHz DMA 采集，结果只更新原始测量缓存，不进入电流环或位置观测器。STM32F407 不支持将 TIM6_TRGO 直接选为 ADC 规则组 EXTSEL，所以使用 TIM6 更新中断调度 DMA 序列；启动点、频率和完成回调均与具体定时器分离，为未来 `SYNC` 模式保留替换位置。
+- `SYNC` 模式本阶段未实现。若未来用于六步 BEMF 过零或相电压观测，必须改为与 PWM 安静窗口/电流环有确定相位关系的触发，可使用 8 kHz 等确定性分频。直接 BEMF 低速幅值太小，不适合作为零速或极低速的主要位置来源；常规 FOC 观测器一般以同步电流、施加电压和 VBUS 为主。
+
 本文记录三相电流 ADC 接入 VOFA+ 后的测试、分析、定位过程和当前结论。本文只记录已经完成实测或代码确认的内容；尚未完成的项目单独标记为待验证。
 
 ## 1. 测试目标

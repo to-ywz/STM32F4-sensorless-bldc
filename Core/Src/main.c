@@ -80,6 +80,13 @@
 #define VOFA_NORMAL_PERIOD_MS         1U
 #define CURRENT_ZERO_CALIBRATION_SAMPLES  2048U
 #define CURRENT_ZERO_CALIBRATION_TIMEOUT_MS  250U
+#define VREFINT_SAMPLE_PERIOD_MS          100U
+#define VREFINT_STARTUP_STABILIZATION_MS  10U
+#define VREFINT_STARTUP_VALID_SAMPLES     16U
+#define ANALOG_FRONTEND_STABILIZATION_MS  400U
+#define ADC3_MONITOR_SAMPLE_COUNT         4U
+/* Replace this source and its timer setup when implementing SYNC mode. */
+#define ADC3_MONITOR_TRIGGER_TIMER        (&htim6)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -108,6 +115,10 @@ static uint8_t debug_uart_rx_dma_buf[DEBUG_UART_RX_DMA_SIZE];
 static uint8_t debug_uart_rx_ring_buf[DEBUG_UART_RX_RING_SIZE];
 static uint8_t debug_uart_tx_ring_buf[DEBUG_UART_TX_RING_SIZE];
 static uint8_t debug_uart_tx_dma_buf[DEBUG_UART_TX_DMA_SIZE];
+static uint16_t adc3_dma_buffer[ADC3_MONITOR_SAMPLE_COUNT];
+static volatile uint8_t adc3_monitor_dma_busy;
+static volatile uint8_t vrefint_sample_busy;
+static uint32_t vrefint_last_sample_tick;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -117,6 +128,10 @@ static void vf_self_check(void);
 static void debug_comm_init(void);
 static void debug_comm_task(void);
 static int current_zero_calibration(void);
+static int vrefint_startup_sample(void);
+static void vrefint_sample_task(void);
+static int adc3_monitor_start(void);
+static void adc3_monitor_trigger(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -206,15 +221,25 @@ int main(void)
   /* 自检: 验证 PWM 硬件通路 */
   vf_self_check();
 
+  /* From here to current-offset calibration the gate driver remains off. */
+  hw_pwm_set_sd(0U);
+  if (vrefint_startup_sample() < 0) {
+      Error_Handler();
+  }
+  HAL_Delay(ANALOG_FRONTEND_STABILIZATION_MS);
+
   /* 启动 TIM1 计数器（不开更新中断） */
   HAL_TIM_Base_Start(&htim1);
 
-  /* 启动 ADC 注入转换，TIM1 CC4 触发 */
+  /* Start only ADC1 injected current conversions from TIM1 CC4. */
   HAL_ADCEx_InjectedStart_IT(&hadc1);
-  HAL_ADCEx_InjectedStart_IT(&hadc3);
 
   /* 驱动器保持关闭，只启动 CH4 触发 ADC，完成三相电流零点标定。 */
   if (current_zero_calibration() < 0) {
+      Error_Handler();
+  }
+
+  if (adc3_monitor_start() < 0) {
       Error_Handler();
   }
 
@@ -234,6 +259,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     debug_comm_task();
+    vrefint_sample_task();
   }
   /* USER CODE END 3 */
 }
@@ -313,7 +339,6 @@ static void vf_self_check(void)
     /* 4. 关闭输出，停止 ADC 中断 */
     hw_pwm_disable(&hw_pwm);
     HAL_ADCEx_InjectedStop_IT(&hadc1);
-    HAL_ADCEx_InjectedStop_IT(&hadc3);
     HAL_Delay(100);
 
     /* 5. 开启 SD */
@@ -415,6 +440,8 @@ static int current_zero_calibration(void)
     app_measurement_start_current_zero_calibration(
         &app_measurement, CURRENT_ZERO_CALIBRATION_SAMPLES);
 
+    hw_pwm_set_sd(0U);
+
     if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4) != HAL_OK) {
         return -1;
     }
@@ -436,26 +463,92 @@ static int current_zero_calibration(void)
         &app_measurement);
 }
 
-void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
+/* ADC1 regular group is dedicated to VREFINT.  Startup sampling makes VDDA
+ * valid before the current-offset calibration; periodic samples are low-rate. */
+static int vrefint_startup_sample(void)
 {
-    if (hadc->Instance == ADC3) {
-        uint16_t bemf_u_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
-            hadc, ADC_INJECTED_RANK_1);
-        uint16_t bemf_v_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
-            hadc, ADC_INJECTED_RANK_2);
-        uint16_t bemf_w_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
-            hadc, ADC_INJECTED_RANK_3);
-        uint16_t vbus_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
-            hadc, ADC_INJECTED_RANK_4);
+    uint32_t sum = 0U;
+    uint32_t index;
 
-        app_measurement_update(&app_measurement,
-                               bemf_u_raw,
-                               bemf_v_raw,
-                               bemf_w_raw,
-                               vbus_raw);
-        return;
+    HAL_Delay(VREFINT_STARTUP_STABILIZATION_MS);
+    for (index = 0U; index <= VREFINT_STARTUP_VALID_SAMPLES; ++index) {
+        if (HAL_ADC_Start(&hadc1) != HAL_OK ||
+            HAL_ADC_PollForConversion(&hadc1, 2U) != HAL_OK) {
+            (void)HAL_ADC_Stop(&hadc1);
+            return -1;
+        }
+        if (index != 0U) {
+            sum += HAL_ADC_GetValue(&hadc1);
+        }
+        if (HAL_ADC_Stop(&hadc1) != HAL_OK) {
+            return -1;
+        }
     }
 
+    app_measurement_update_vrefint(
+        &app_measurement, (uint16_t)(sum / VREFINT_STARTUP_VALID_SAMPLES));
+    vrefint_last_sample_tick = HAL_GetTick();
+    return 0;
+}
+
+static void vrefint_sample_task(void)
+{
+    uint32_t now = HAL_GetTick();
+
+    if (vrefint_sample_busy != 0U ||
+        (uint32_t)(now - vrefint_last_sample_tick) < VREFINT_SAMPLE_PERIOD_MS) {
+        return;
+    }
+    vrefint_sample_busy = 1U;
+    if (HAL_ADC_Start_IT(&hadc1) == HAL_OK) {
+        vrefint_last_sample_tick = now;
+    } else {
+        vrefint_sample_busy = 0U;
+    }
+}
+
+/* MONITOR-mode implementation.  Keep the launch point separate from the DMA
+ * completion callback so a future TIM1-derived SYNC source can replace it. */
+static int adc3_monitor_start(void)
+{
+    adc3_monitor_dma_busy = 0U;
+    return (HAL_TIM_Base_Start_IT(ADC3_MONITOR_TRIGGER_TIMER) == HAL_OK) ? 0 : -1;
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim == ADC3_MONITOR_TRIGGER_TIMER) {
+        adc3_monitor_trigger();
+    }
+}
+
+static void adc3_monitor_trigger(void)
+{
+    if (adc3_monitor_dma_busy == 0U) {
+        adc3_monitor_dma_busy = 1U;
+        if (HAL_ADC_Start_DMA(&hadc3, (uint32_t *)adc3_dma_buffer,
+                              ADC3_MONITOR_SAMPLE_COUNT) != HAL_OK) {
+            adc3_monitor_dma_busy = 0U;
+        }
+    }
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+    if (hadc->Instance == ADC1) {
+        app_measurement_update_vrefint(&app_measurement,
+                                       (uint16_t)HAL_ADC_GetValue(hadc));
+        vrefint_sample_busy = 0U;
+    } else if (hadc->Instance == ADC3) {
+        app_measurement_update(&app_measurement,
+                               adc3_dma_buffer[0], adc3_dma_buffer[1],
+                               adc3_dma_buffer[2], adc3_dma_buffer[3]);
+        adc3_monitor_dma_busy = 0U;
+    }
+}
+
+void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
     if (hadc->Instance != ADC1)
         return;
 
@@ -486,10 +579,6 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
                                    current_u_raw,
                                    current_v_raw,
                                    current_w_raw);
-    app_measurement_update_vrefint(
-        &app_measurement,
-        (uint16_t)HAL_ADCEx_InjectedGetValue(
-            hadc, ADC_INJECTED_RANK_4));
 
     HAL_GPIO_WritePin(SECTOR_TEST_GPIO_Port,
                       SECTOR_TEST_Pin,

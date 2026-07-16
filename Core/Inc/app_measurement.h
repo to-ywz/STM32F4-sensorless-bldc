@@ -69,7 +69,10 @@ typedef struct {
  */
 typedef struct {
     app_measurement_config_t config;
-    volatile uint32_t sequence;
+    /* Each producer owns one sequence counter; readers snapshot them independently. */
+    volatile uint32_t current_sequence;
+    volatile uint32_t voltage_sequence;
+    volatile uint32_t vref_sequence;
     volatile uint16_t current_u_raw;
     volatile uint16_t current_v_raw;
     volatile uint16_t current_w_raw;
@@ -96,7 +99,7 @@ int app_measurement_init(app_measurement_t *measurement,
                          const app_measurement_config_t *config);
 
 /**
- * @brief 更新一次 ADC3 注入序列结果。
+ * @brief 更新一次 ADC3 规则组 DMA 扫描序列结果。
  */
 void app_measurement_update(app_measurement_t *measurement,
                             uint16_t bemf_u_raw,
