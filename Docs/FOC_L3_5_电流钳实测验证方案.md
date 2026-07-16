@@ -210,3 +210,16 @@ current_w_a = -0.0465 A
 VOFA+ 显示的是 PWM 同步采样和电流重构后的离散数据。当前截图中的一组三相瞬时值满足三相和接近零，可用于确认符号关系和重构关系。
 
 ![VOFA+ 三相电流波形](Images/FOC_L3_5/VOFA%E4%B8%89%E7%9B%B8%E7%94%B5%E6%B5%81%E6%B3%A2%E5%BD%A2.png)
+
+### 9.3 S1~S6 扇区示波器记录
+
+以下图片与第 6 节数据表中的 S1~S6 一一对应，用于对照 `PE0`、栅极波形、电流钳和当前扇区比较值：
+
+| 扇区 | 波形记录 |
+|---|---|
+| S1 | ![S1 扇区波形](Images/FOC_L3_5/sector1.jpg) |
+| S2 | ![S2 扇区波形](Images/FOC_L3_5/sector2.jpg) |
+| S3 | ![S3 扇区波形](Images/FOC_L3_5/sector3.jpg) |
+| S4 | ![S4 扇区波形](Images/FOC_L3_5/sector4.jpg) |
+| S5 | ![S5 扇区波形](Images/FOC_L3_5/sector5.jpg) |
+| S6 | ![S6 扇区波形](Images/FOC_L3_5/sector6.jpg) |

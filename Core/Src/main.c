@@ -215,9 +215,8 @@ int main(void)
   /* 使能 PWM 输出 (SD = 高) */
   hw_pwm_enable(&hw_pwm);
 
-  /* ADC 偏置校准和母线检查完成后，调用 open_loop_vf_start(&vf) 启动电机。
-     当前阶段: 保持 STOP 状态，不自动启动。
-     TODO: 需要实现 ADC 偏置校准和母线电压检查。 */
+  /* 三相电流零点校准已经完成；母线电压保护仍未接入。
+     当前阶段保持 STOP 状态，不自动启动，等待串口 start 命令。 */
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -451,7 +450,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     if (hadc->Instance != ADC1)
         return;
 
-    /* 读取注入转换结果（当前未使用，预留电流反馈） */
+    /* 读取三相电流原始值；测量模块会按扇区选择两相并重构第三相。 */
     uint16_t current_u_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
         hadc, ADC_INJECTED_RANK_1);
     uint16_t current_v_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
