@@ -53,9 +53,9 @@ static uint8_t app_debug_fill_vofa_normal(app_debug_t *debug,
     values[14] = measurement.vdda_v;
     values[15] = (float)measurement.vrefint_raw;
     values[16] = debug->vf->freq;
-    values[17] = debug->vf->v_out;
-    values[18] = (float)debug->svpwm->pwm.cmp_a;
-    values[19] = (float)debug->svpwm->pwm.cmp_b;
+    values[17] = (float)debug->svpwm->pwm.cmp_a;
+    values[18] = (float)debug->svpwm->pwm.cmp_b;
+    values[19] = (float)debug->svpwm->pwm.cmp_c;
 
     return VOFA_NORMAL_MAX_CHANNELS;
 }
@@ -143,6 +143,10 @@ void app_debug_cmd_start(void *user)
     app_debug_t *debug = (app_debug_t *)user;
 
     if (debug == NULL || debug->vf == NULL) {
+        return;
+    }
+
+    if (app_measurement_is_overcurrent_fault(debug->measurement) != 0U) {
         return;
     }
 

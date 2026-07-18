@@ -4,6 +4,7 @@
  */
 
 #include "app_measurement.h"
+#include <math.h>
 #include <stddef.h>
 
 int app_measurement_init(app_measurement_t *measurement,
@@ -14,6 +15,8 @@ int app_measurement_init(app_measurement_t *measurement,
         config->vrefint_cal_raw == 0U || config->vrefint_cal_v <= 0.0f ||
         config->current_shunt_ohm <= 0.0f ||
         config->current_amplifier_gain <= 0.0f ||
+        config->software_overcurrent_limit_a <= 0.0f ||
+        config->software_overcurrent_trip_count == 0U ||
         config->bemf_scale <= 0.0f || config->vbus_scale <= 0.0f) {
         return -1;
     }
@@ -34,6 +37,9 @@ int app_measurement_init(app_measurement_t *measurement,
                                         config->adc_max_count;
     measurement->current_offset_v_raw = measurement->current_offset_u_raw;
     measurement->current_offset_w_raw = measurement->current_offset_u_raw;
+    measurement->overcurrent_enabled = 0U;
+    measurement->overcurrent_fault = 0U;
+    measurement->overcurrent_trip_count = 0U;
     measurement->bemf_u_raw = 0U;
     measurement->bemf_v_raw = 0U;
     measurement->bemf_w_raw = 0U;
@@ -41,6 +47,105 @@ int app_measurement_init(app_measurement_t *measurement,
     measurement->vrefint_raw = config->vrefint_cal_raw;
 
     return 0;
+}
+
+void app_measurement_set_overcurrent_enabled(
+    app_measurement_t *measurement,
+    uint8_t enabled)
+{
+    if (measurement == NULL) {
+        return;
+    }
+
+    measurement->overcurrent_enabled = enabled ? 1U : 0U;
+    measurement->overcurrent_trip_count = 0U;
+}
+
+uint8_t app_measurement_is_overcurrent_fault(
+    const app_measurement_t *measurement)
+{
+    if (measurement == NULL) {
+        return 0U;
+    }
+
+    return measurement->overcurrent_fault;
+}
+
+uint8_t app_measurement_check_overcurrent(
+    app_measurement_t *measurement,
+    uint8_t current_sector,
+    uint16_t current_u_raw,
+    uint16_t current_v_raw,
+    uint16_t current_w_raw)
+{
+    float vdda_v;
+    float current_u_a;
+    float current_v_a;
+    float current_w_a;
+    float current_peak_a;
+    foc_current_result_t current_result;
+
+    if (measurement == NULL ||
+        measurement->overcurrent_enabled == 0U ||
+        measurement->overcurrent_fault != 0U ||
+        measurement->current_calibration_target != 0U) {
+        return 0U;
+    }
+
+    if (measurement->vrefint_raw == 0U) {
+        vdda_v = measurement->config.adc_vref;
+    } else {
+        vdda_v = (float)measurement->config.vrefint_cal_raw *
+                 measurement->config.vrefint_cal_v /
+                 (float)measurement->vrefint_raw;
+    }
+
+    current_u_a = ((float)current_u_raw -
+                   measurement->current_offset_u_raw) * vdda_v /
+                  (measurement->config.adc_max_count *
+                   measurement->config.current_shunt_ohm *
+                   measurement->config.current_amplifier_gain);
+    current_v_a = ((float)current_v_raw -
+                   measurement->current_offset_v_raw) * vdda_v /
+                  (measurement->config.adc_max_count *
+                   measurement->config.current_shunt_ohm *
+                   measurement->config.current_amplifier_gain);
+    current_w_a = ((float)current_w_raw -
+                   measurement->current_offset_w_raw) * vdda_v /
+                  (measurement->config.adc_max_count *
+                   measurement->config.current_shunt_ohm *
+                   measurement->config.current_amplifier_gain);
+
+    /* 保护判断必须使用与 VOFA 相同的扇区重构结果。 */
+    if (foc_current_reconstruct(current_sector,
+                                current_u_a,
+                                current_v_a,
+                                current_w_a,
+                                &current_result) == 0) {
+        current_u_a = current_result.current_u_a;
+        current_v_a = current_result.current_v_a;
+        current_w_a = current_result.current_w_a;
+    }
+
+    current_peak_a = fmaxf(fabsf(current_u_a), fabsf(current_v_a));
+    current_peak_a = fmaxf(current_peak_a, fabsf(current_w_a));
+
+    if (current_peak_a >= measurement->config.software_overcurrent_limit_a) {
+        if (measurement->overcurrent_trip_count < UINT16_MAX) {
+            measurement->overcurrent_trip_count++;
+        }
+
+        if (measurement->overcurrent_trip_count >=
+            measurement->config.software_overcurrent_trip_count) {
+            measurement->overcurrent_fault = 1U;
+            measurement->overcurrent_enabled = 0U;
+            return 1U;
+        }
+    } else {
+        measurement->overcurrent_trip_count = 0U;
+    }
+
+    return 0U;
 }
 
 void app_measurement_update_current(app_measurement_t *measurement,

@@ -14,7 +14,7 @@ extern "C" {
 #include "foc_current_reconstruct.h"
 
 /**
- * @brief ADC3 测量换算配置。
+ * @brief ADC、电流和电压测量换算配置。
  */
 typedef struct {
     float adc_vref;
@@ -24,6 +24,8 @@ typedef struct {
     float current_offset_v;
     float current_shunt_ohm;
     float current_amplifier_gain;
+    float software_overcurrent_limit_a;
+    uint16_t software_overcurrent_trip_count;
     float bemf_offset_v;
     float bemf_scale;
     float vbus_offset_v;
@@ -82,6 +84,9 @@ typedef struct {
     float current_offset_u_raw;
     float current_offset_v_raw;
     float current_offset_w_raw;
+    volatile uint8_t overcurrent_enabled;
+    volatile uint8_t overcurrent_fault;
+    volatile uint16_t overcurrent_trip_count;
     volatile uint16_t bemf_u_raw;
     volatile uint16_t bemf_v_raw;
     volatile uint16_t bemf_w_raw;
@@ -112,6 +117,33 @@ void app_measurement_update_current(app_measurement_t *measurement,
                                     uint16_t current_u_raw,
                                     uint16_t current_v_raw,
                                     uint16_t current_w_raw);
+
+/**
+ * @brief 设置软件过流保护是否开始监控。
+ *
+ * 保护只应在三相零点校准完成且 PWM 已经准备好后启用。
+ */
+void app_measurement_set_overcurrent_enabled(
+    app_measurement_t *measurement,
+    uint8_t enabled);
+
+/**
+ * @brief 使用本次 ADC 原始值执行软件过流判断。
+ *
+ * @return 1 表示本次新触发过流故障，0 表示未触发。
+ */
+uint8_t app_measurement_check_overcurrent(
+    app_measurement_t *measurement,
+    uint8_t current_sector,
+    uint16_t current_u_raw,
+    uint16_t current_v_raw,
+    uint16_t current_w_raw);
+
+/**
+ * @brief 查询软件过流故障锁存状态。
+ */
+uint8_t app_measurement_is_overcurrent_fault(
+    const app_measurement_t *measurement);
 
 /**
  * @brief 开始三相电流零点采样。

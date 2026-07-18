@@ -52,7 +52,7 @@
 #define PWM_FREQ        16000       /* PWM 频率 (Hz) */
 #define PWM_PERIOD      5249        /* TIM1 ARR 值 */
 #define ADC_TRIGGER_TICKS ((PWM_PERIOD * 3U + 2U) / 4U) /* 50% PWM 导通区中部 */
-#define DEAD_TIME_US    1.0f        /* 死区时间 (us) */
+#define DEAD_TIME_US    0.5f        /* 死区时间 (us) */
 
 #define VF_TARGET_FREQ  17.0f       /* 目标频率 (Hz) */
 #define VF_ACCEL        2.0f        /* 加速度 (Hz/s) */
@@ -79,6 +79,8 @@
 #define VOFA_NORMAL_PERIOD_MS         1U
 #define CURRENT_ZERO_CALIBRATION_SAMPLES  2048U
 #define CURRENT_ZERO_CALIBRATION_TIMEOUT_MS  250U
+#define SOFTWARE_OVERCURRENT_LIMIT_A     5.0f
+#define SOFTWARE_OVERCURRENT_TRIP_COUNT  2U
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -166,6 +168,8 @@ int main(void)
       .current_offset_v = 1.27f,
       .current_shunt_ohm = 0.02f,
       .current_amplifier_gain = 8.0f,
+      .software_overcurrent_limit_a = SOFTWARE_OVERCURRENT_LIMIT_A,
+      .software_overcurrent_trip_count = SOFTWARE_OVERCURRENT_TRIP_COUNT,
       .bemf_offset_v  = BEMF_OFFSET_V,
       .bemf_scale     = BEMF_SCALE,
       .vbus_offset_v  = VBUS_OFFSET_V,
@@ -214,6 +218,8 @@ int main(void)
 
   /* 使能 PWM 输出 (SD = 高) */
   hw_pwm_enable(&hw_pwm);
+  /* 零点校准完成后才允许软件过流保护参与运行判断。 */
+  app_measurement_set_overcurrent_enabled(&app_measurement, 1U);
 
   /* 三相电流零点校准已经完成；母线电压保护仍未接入。
      当前阶段保持 STOP 状态，不自动启动，等待串口 start 命令。 */
@@ -462,6 +468,17 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
                                    current_u_raw,
                                    current_v_raw,
                                    current_w_raw);
+
+    if (app_measurement_check_overcurrent(&app_measurement,
+                                          svpwm.sector,
+                                          current_u_raw,
+                                          current_v_raw,
+                                          current_w_raw) != 0U) {
+        /* 过流故障锁存：先停 V/f，再关闭驱动器和 PWM 输出。 */
+        open_loop_vf_stop(&vf);
+        hw_pwm_disable(&hw_pwm);
+        return;
+    }
     app_measurement_update_vrefint(
         &app_measurement,
         (uint16_t)HAL_ADCEx_InjectedGetValue(
