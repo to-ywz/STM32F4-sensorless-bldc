@@ -115,12 +115,12 @@ static uint8_t debug_uart_tx_dma_buf[DEBUG_UART_TX_DMA_SIZE];
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-static void vf_self_check(void);
 static void debug_comm_init(void);
 static void debug_comm_task(void);
 static int current_zero_calibration(void);
 static void power_stage_disable(void);
 static void raise_control_fault(motor_fault_code_t code);
+static int debug_power_stage_set(void *user, uint8_t enable);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -207,11 +207,11 @@ int main(void)
   };
   hw_pwm_init(&hw_pwm, &pwm_cfg);
 
-  /* 自检: 验证 PWM 硬件通路 */
-  vf_self_check();
-
   /* 启动 TIM1 计数器（不开更新中断） */
   HAL_TIM_Base_Start(&htim1);
+
+  /* 上电默认关闭功率级；仅由串口 start 命令显式使能。 */
+  hw_pwm_disable(&hw_pwm);
 
   /* 启动 ADC 注入转换，TIM1 CC4 触发 */
   HAL_ADCEx_InjectedStart_IT(&hadc1);
@@ -222,13 +222,11 @@ int main(void)
       Error_Handler();
   }
 
-  /* 使能 PWM 输出 (SD = 高) */
-  hw_pwm_enable(&hw_pwm);
   /* 零点校准完成后才允许软件过流保护参与运行判断。 */
   app_measurement_set_overcurrent_enabled(&app_measurement, 1U);
 
   /* 三相电流零点校准已经完成；母线电压保护仍未接入。
-     当前阶段保持 STOP 状态，不自动启动，等待串口 start 命令。 */
+     当前阶段保持 STOP 状态，功率级关闭，等待串口 start 命令。 */
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -292,40 +290,6 @@ void SystemClock_Config(void)
 /* USER CODE BEGIN 4 */
 
 /**
- * @brief  自检：关闭 SD → 发固定波形 → 关闭输出 → 开启 SD
- *
- * 仅用于调试验证 PWM 硬件通路，后续可替换为其他流程。
- */
-static void vf_self_check(void)
-{
-    /* 1. 关闭驱动器 (SD = 低) */
-    hw_pwm_set_sd(0);
-
-    /* 2. 设置 50% 占空比（三相对称，观测波形用） */
-    pwm_output_t test_pwm = {
-        .freq   = PWM_FREQ,
-        .period = PWM_PERIOD,
-        .cmp_a  = PWM_PERIOD / 2,
-        .cmp_b  = PWM_PERIOD / 2,
-        .cmp_c  = PWM_PERIOD / 2,
-    };
-    hw_pwm_set_duty(&hw_pwm, &test_pwm);
-
-    /* 3. 使能 PWM 输出，示波器观测 */
-    hw_pwm_enable(&hw_pwm);
-    HAL_Delay(2000);
-
-    /* 4. 关闭输出，停止 ADC 中断 */
-    hw_pwm_disable(&hw_pwm);
-    HAL_ADCEx_InjectedStop_IT(&hadc1);
-    HAL_ADCEx_InjectedStop_IT(&hadc3);
-    HAL_Delay(100);
-
-    /* 5. 开启 SD */
-    hw_pwm_set_sd(1);
-}
-
-/**
  * @brief 初始化调试串口输出链路
  *
  * 当前使用 USART1，发送侧为 ringbuffer + DMA，接收侧为 DMA + IDLE。
@@ -365,6 +329,8 @@ static void debug_comm_init(void)
         .scope = &debug_scope,
         .measurement = &app_measurement,
         .fault = &motor_fault,
+        .power_stage_set = debug_power_stage_set,
+        .power_stage_user = NULL,
     };
 
     if (comm_uart_stm32_init(&debug_uart, &debug_uart_drv, &uart_cfg) < 0) {
@@ -396,6 +362,25 @@ static void debug_comm_init(void)
 static void debug_comm_task(void)
 {
     app_debug_poll(&app_debug, HAL_GetTick());
+}
+
+/**
+ * @brief 串口启动流程使用的功率级控制回调。
+ * @param user 未使用，保留回调接口扩展性。
+ * @param enable 1: 启动 PWM 并使能 SD；0: 关闭 PWM 并拉低 SD。
+ * @return 0 表示目标状态已设置。
+ */
+static int debug_power_stage_set(void *user, uint8_t enable)
+{
+    (void)user;
+
+    if (enable != 0U) {
+        hw_pwm_enable(&hw_pwm);
+        return hw_pwm_is_enabled(&hw_pwm) != 0U ? 0 : -1;
+    }
+
+    hw_pwm_disable(&hw_pwm);
+    return hw_pwm_is_enabled(&hw_pwm) == 0U ? 0 : -1;
 }
 
 /**

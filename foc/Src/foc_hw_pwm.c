@@ -155,7 +155,7 @@ void hw_pwm_set_duty(hw_pwm_instance_t *pwm, const pwm_output_t *output)
 }
 
 /**
- * @brief   使能 PWM 输出
+ * @brief   显式启动 PWM 并使能功率级
  */
 void hw_pwm_enable(hw_pwm_instance_t *pwm)
 {
@@ -176,7 +176,7 @@ void hw_pwm_enable(hw_pwm_instance_t *pwm)
     /* 使能 CH4，用于触发 ADC 注入转换 */
     HAL_TIM_PWM_Start(pwm->config.htim, TIM_CHANNEL_4);
 
-    /* 使能驱动器 (SD = 高) */
+    /* 显式启动流程才允许使能驱动器 (SD = 高)。 */
     HAL_GPIO_WritePin(SD_GPIO_PORT, SD_GPIO_PIN, GPIO_PIN_SET);
 
     pwm->enabled = 1;
@@ -187,11 +187,11 @@ void hw_pwm_enable(hw_pwm_instance_t *pwm)
  */
 void hw_pwm_disable(hw_pwm_instance_t *pwm)
 {
-    if (pwm == NULL || !pwm->enabled) {
+    if (pwm == NULL) {
         return;
     }
 
-    /* 禁用驱动器 (SD = 低) */
+    /* 无论内部状态如何，关闭动作都必须先拉低 SD。 */
     HAL_GPIO_WritePin(SD_GPIO_PORT, SD_GPIO_PIN, GPIO_PIN_RESET);
 
     /* 禁用 TIM1 输出 */

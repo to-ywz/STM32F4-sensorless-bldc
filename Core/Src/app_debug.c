@@ -87,7 +87,7 @@ int app_debug_init(app_debug_t *debug, const app_debug_config_t *config)
     if (debug == NULL || config == NULL || config->vf == NULL ||
         config->svpwm == NULL || config->cmd == NULL ||
         config->scope == NULL || config->measurement == NULL ||
-        config->fault == NULL) {
+        config->fault == NULL || config->power_stage_set == NULL) {
         return -1;
     }
 
@@ -97,6 +97,8 @@ int app_debug_init(app_debug_t *debug, const app_debug_config_t *config)
     debug->scope = config->scope;
     debug->measurement = config->measurement;
     debug->fault = config->fault;
+    debug->power_stage_set = config->power_stage_set;
+    debug->power_stage_user = config->power_stage_user;
 
     return 0;
 }
@@ -154,6 +156,11 @@ void app_debug_cmd_start(void *user)
         return;
     }
 
+    if (debug->power_stage_set == NULL ||
+        debug->power_stage_set(debug->power_stage_user, 1U) != 0) {
+        return;
+    }
+
     open_loop_vf_start(debug->vf);
 }
 
@@ -166,6 +173,10 @@ void app_debug_cmd_stop(void *user)
     }
 
     open_loop_vf_stop(debug->vf);
+
+    if (debug->power_stage_set != NULL) {
+        (void)debug->power_stage_set(debug->power_stage_user, 0U);
+    }
 }
 
 void app_debug_cmd_set_freq(void *user, float freq_hz)

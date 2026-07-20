@@ -55,13 +55,15 @@ int hw_pwm_init(hw_pwm_instance_t *pwm, const hw_pwm_config_t *config);
 void hw_pwm_set_duty(hw_pwm_instance_t *pwm, const pwm_output_t *output);
 
 /**
- * @brief   使能 PWM 输出
+ * @brief   显式启动 PWM 并使能功率级。
+ * @note    该接口会拉高驱动器 SD，禁止用于上电自检或普通波形观测。
  * @param   pwm     PWM 实例指针
  */
 void hw_pwm_enable(hw_pwm_instance_t *pwm);
 
 /**
- * @brief   禁用 PWM 输出
+ * @brief   关闭 PWM、互补输出和功率级。
+ * @note    无论内部使能标志如何，都会拉低驱动器 SD。
  * @param   pwm     PWM 实例指针
  */
 void hw_pwm_disable(hw_pwm_instance_t *pwm);

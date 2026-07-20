@@ -20,6 +20,8 @@ extern "C" {
 #include "svpwm.h"
 #include <stdint.h>
 
+typedef int (*app_debug_power_stage_set_fn)(void *user, uint8_t enable);
+
 typedef struct {
     open_loop_vf_t  *vf;
     svpwm_output_t  *svpwm;
@@ -27,6 +29,8 @@ typedef struct {
     comm_scope_t    *scope;
     app_measurement_t *measurement;
     motor_fault_t   *fault;
+    app_debug_power_stage_set_fn power_stage_set;
+    void            *power_stage_user;
 } app_debug_t;
 
 typedef struct {
@@ -36,6 +40,8 @@ typedef struct {
     comm_scope_t    *scope;
     app_measurement_t *measurement;
     motor_fault_t   *fault;
+    app_debug_power_stage_set_fn power_stage_set;
+    void            *power_stage_user;
 } app_debug_config_t;
 
 /**
@@ -61,7 +67,7 @@ void app_debug_poll(app_debug_t *debug, uint32_t now_ms);
 void app_debug_on_pwm_update(app_debug_t *debug, const pwm_output_t *pwm);
 
 /**
- * @brief 串口命令：启动控制。
+ * @brief 串口命令：显式使能功率级并启动控制。
  * @param user 应用层调试对象。
  */
 void app_debug_cmd_start(void *user);
