@@ -53,6 +53,14 @@ typedef struct {
     float    mod_limit;
 } svpwm_config_t;
 
+typedef enum {
+    SVPWM_FAULT_NONE          = 0U,
+    SVPWM_FAULT_INVALID_INPUT = 1U,
+    SVPWM_FAULT_INVALID_BUS   = 2U,
+    SVPWM_FAULT_INVALID_CONFIG = 3U,
+    SVPWM_FAULT_NUMERIC        = 4U
+} svpwm_fault_t;
+
 /**
  * @brief SVPWM 输出
  *
@@ -61,7 +69,7 @@ typedef struct {
  *   v_beta   - β 轴电压
  *   sector   - 当前扇区 (1~6, 仅用于调试)
  *   pwm      - PWM 输出
- *   fault    - 故障标志: 1=输入异常，输出安全零矢量
+ *   fault    - 故障码: SVPWM_FAULT_NONE 表示本次更新正常
  */
 typedef struct {
     float v_alpha;
@@ -95,8 +103,8 @@ void svpwm_set_mod_limit(svpwm_output_t *svpwm, float mod_limit);
  *
  * 采用 αβ→三相+零序注入方式，适用于 STM32 TIM1 中心对齐 PWM。
  *
- * 输入异常 (NULL、v_dc<=0、NaN/Inf) 时输出安全零矢量 (50% 占空比)，
- * 并设置 fault 标志。
+ * 输入异常 (NULL、v_dc<=0、NaN/Inf) 时输出零平均线电压指令 (50% 占空比)，
+ * 并设置 fault 故障码。功率级关断和故障锁存由上层控制链路完成。
  *
  * @param svpwm   : SVPWM 实例指针
  * @param v_alpha : α 轴电压 (V)

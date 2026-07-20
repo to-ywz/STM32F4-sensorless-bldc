@@ -86,7 +86,8 @@ int app_debug_init(app_debug_t *debug, const app_debug_config_t *config)
 {
     if (debug == NULL || config == NULL || config->vf == NULL ||
         config->svpwm == NULL || config->cmd == NULL ||
-        config->scope == NULL || config->measurement == NULL) {
+        config->scope == NULL || config->measurement == NULL ||
+        config->fault == NULL) {
         return -1;
     }
 
@@ -95,6 +96,7 @@ int app_debug_init(app_debug_t *debug, const app_debug_config_t *config)
     debug->cmd   = config->cmd;
     debug->scope = config->scope;
     debug->measurement = config->measurement;
+    debug->fault = config->fault;
 
     return 0;
 }
@@ -146,7 +148,9 @@ void app_debug_cmd_start(void *user)
         return;
     }
 
-    if (app_measurement_is_overcurrent_fault(debug->measurement) != 0U) {
+    /* 故障锁存后仍接收串口命令，但异常状态下 start 不生效。 */
+    if (app_measurement_is_overcurrent_fault(debug->measurement) != 0U ||
+        motor_fault_is_latched(debug->fault) != 0U) {
         return;
     }
 

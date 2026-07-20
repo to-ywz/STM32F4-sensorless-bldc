@@ -547,6 +547,11 @@
               <FileType>1</FileType>
               <FilePath>../Core/Src/app_measurement.c</FilePath>
             </File>
+            <File>
+              <FileName>motor_fault.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/motor_fault.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

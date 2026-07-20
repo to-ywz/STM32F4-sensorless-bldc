@@ -56,13 +56,13 @@ static uint32_t svpwm_float_to_ccr(float value, uint32_t period)
 /**
  * @brief 输出安全零矢量 (50% 占空比)
  */
-static void svpwm_safe_output(svpwm_output_t *svpwm)
+static void svpwm_safe_output(svpwm_output_t *svpwm, svpwm_fault_t fault)
 {
     uint32_t half = svpwm->pwm.period / 2U;
     svpwm->pwm.cmp_a = half;
     svpwm->pwm.cmp_b = half;
     svpwm->pwm.cmp_c = half;
-    svpwm->fault = 1;
+    svpwm->fault = (uint8_t)fault;
 }
 
 void svpwm_init(svpwm_output_t *svpwm, float v_dc, uint16_t freq, uint16_t period)
@@ -109,17 +109,31 @@ void svpwm_update(svpwm_output_t *svpwm, float v_alpha, float v_beta)
     float period = (float)svpwm->cfg.period;
 
     /* ---- 输入校验 ---- */
-    if (!isfinite(v_alpha) || !isfinite(v_beta) ||
-        !isfinite(v_dc) || v_dc <= 0.0f || period <= 0.0f) {
-        svpwm_safe_output(svpwm);
+    if (!isfinite(v_alpha) || !isfinite(v_beta)) {
+        svpwm_safe_output(svpwm, SVPWM_FAULT_INVALID_INPUT);
+        return;
+    }
+
+    if (!isfinite(v_dc) || v_dc <= 0.0f) {
+        svpwm_safe_output(svpwm, SVPWM_FAULT_INVALID_BUS);
+        return;
+    }
+
+    if (period <= 0.0f || !isfinite(svpwm->cfg.mod_limit) ||
+        svpwm->cfg.mod_limit <= 0.0f) {
+        svpwm_safe_output(svpwm, SVPWM_FAULT_INVALID_CONFIG);
         return;
     }
 
     /* ---- 过调制保护: 等比缩放 αβ 电压 ---- */
     float v_mag_sq = v_alpha * v_alpha + v_beta * v_beta;
     float v_max = v_dc * svpwm->cfg.mod_limit / 1.7320508f; /* Vdc * mod_limit / √3 */
+    if (!isfinite(v_mag_sq) || !isfinite(v_max)) {
+        svpwm_safe_output(svpwm, SVPWM_FAULT_NUMERIC);
+        return;
+    }
     if (v_max <= 0.0f) {
-        svpwm_safe_output(svpwm);
+        svpwm_safe_output(svpwm, SVPWM_FAULT_INVALID_CONFIG);
         return;
     }
 
@@ -164,6 +178,11 @@ void svpwm_update(svpwm_output_t *svpwm, float v_alpha, float v_beta)
     float ccr_a = duty_a * period;
     float ccr_b = duty_b * period;
     float ccr_c = duty_c * period;
+
+    if (!isfinite(ccr_a) || !isfinite(ccr_b) || !isfinite(ccr_c)) {
+        svpwm_safe_output(svpwm, SVPWM_FAULT_NUMERIC);
+        return;
+    }
 
     svpwm->pwm.cmp_a = svpwm_float_to_ccr(ccr_a, svpwm->cfg.period);
     svpwm->pwm.cmp_b = svpwm_float_to_ccr(ccr_b, svpwm->cfg.period);

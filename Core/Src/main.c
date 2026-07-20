@@ -37,6 +37,7 @@
 #include "comm_scope.h"
 #include "app_debug.h"
 #include "app_measurement.h"
+#include "motor_fault.h"
 #include "stm32f4xx_ll_adc.h"
 #include <math.h>
 /* USER CODE END Includes */
@@ -101,6 +102,7 @@ static comm_vofa_t       debug_vofa;      /* VOFA+ JustFloat 输出对象 */
 static comm_cmd_t        debug_cmd;       /* 串口文本命令解析对象 */
 static comm_scope_t      debug_scope;     /* 调试示波输出对象 */
 static app_debug_t       app_debug;       /* 应用层调试模板对象 */
+static motor_fault_t     motor_fault;     /* 电机控制故障锁存对象 */
 
 static app_measurement_t app_measurement;
 
@@ -117,6 +119,8 @@ static void vf_self_check(void);
 static void debug_comm_init(void);
 static void debug_comm_task(void);
 static int current_zero_calibration(void);
+static void power_stage_disable(void);
+static void raise_control_fault(motor_fault_code_t code);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -180,6 +184,8 @@ int main(void)
   }
 
   /* USER CODE BEGIN 2 */
+
+  motor_fault_init(&motor_fault);
 
   /* 调试串口初始化：USART1 + DMA + VOFA+ JustFloat */
   debug_comm_init();
@@ -358,6 +364,7 @@ static void debug_comm_init(void)
         .cmd   = &debug_cmd,
         .scope = &debug_scope,
         .measurement = &app_measurement,
+        .fault = &motor_fault,
     };
 
     if (comm_uart_stm32_init(&debug_uart, &debug_uart_drv, &uart_cfg) < 0) {
@@ -389,6 +396,35 @@ static void debug_comm_init(void)
 static void debug_comm_task(void)
 {
     app_debug_poll(&app_debug, HAL_GetTick());
+}
+
+/**
+ * @brief 关闭功率级并停止控制状态。
+ * @note 该函数只负责动作，不清除故障锁存，异常状态下串口 start 命令不生效。
+ */
+static void power_stage_disable(void)
+{
+    open_loop_vf_stop(&vf);
+    hw_pwm_disable(&hw_pwm);
+}
+
+/**
+ * @brief 保存控制现场并锁存调制故障。
+ */
+static void raise_control_fault(motor_fault_code_t code)
+{
+    motor_fault_context_t context = {
+        .svpwm_fault = svpwm.fault,
+        .sector      = svpwm.sector,
+        .v_alpha     = svpwm.v_alpha,
+        .v_beta      = svpwm.v_beta,
+        .cmp_a       = svpwm.pwm.cmp_a,
+        .cmp_b       = svpwm.pwm.cmp_b,
+        .cmp_c       = svpwm.pwm.cmp_c,
+        .tick_ms     = HAL_GetTick(),
+    };
+
+    motor_fault_raise(&motor_fault, code, &context);
 }
 
 /**
@@ -456,6 +492,11 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     if (hadc->Instance != ADC1)
         return;
 
+    /* 故障锁存后不再执行任何控制计算或 PWM 更新。 */
+    if (motor_fault_is_latched(&motor_fault) != 0U) {
+        return;
+    }
+
     /* 读取三相电流原始值；测量模块会按扇区选择两相并重构第三相。 */
     uint16_t current_u_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
         hadc, ADC_INJECTED_RANK_1);
@@ -473,10 +514,10 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
                                           svpwm.sector,
                                           current_u_raw,
                                           current_v_raw,
-                                          current_w_raw) != 0U) {
-        /* 过流故障锁存：先停 V/f，再关闭驱动器和 PWM 输出。 */
-        open_loop_vf_stop(&vf);
-        hw_pwm_disable(&hw_pwm);
+        current_w_raw) != 0U) {
+        /* 过流故障锁存：关闭功率级，禁止控制链路继续运行。 */
+        raise_control_fault(MOTOR_FAULT_OVERCURRENT);
+        power_stage_disable();
         return;
     }
     app_measurement_update_vrefint(
@@ -506,6 +547,14 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         float v_alpha, v_beta;
         foc_inv_park(vf.v_out, 0.0f, vf.theta_e, &v_alpha, &v_beta);
         svpwm_update(&svpwm, v_alpha, v_beta);
+
+        /* 安全零矢量不是最终保护动作，必须切断功率级并锁存故障。 */
+        if (svpwm.fault != SVPWM_FAULT_NONE) {
+            raise_control_fault(MOTOR_FAULT_MODULATION);
+            power_stage_disable();
+            return;
+        }
+
         hw_pwm_set_duty(&hw_pwm, &svpwm.pwm);
 
         app_debug_on_pwm_update(&app_debug, &svpwm.pwm);
