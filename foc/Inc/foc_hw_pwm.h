@@ -62,11 +62,31 @@ void hw_pwm_set_duty(hw_pwm_instance_t *pwm, const pwm_output_t *output);
 void hw_pwm_enable(hw_pwm_instance_t *pwm);
 
 /**
- * @brief   关闭 PWM、互补输出和功率级。
- * @note    无论内部使能标志如何，都会拉低驱动器 SD。
+ * @brief   完全关闭 PWM、互补输出、功率级和 CH4 控制触发。
+ * @note    需要保留 ADC 监控时，不应调用此接口。
  * @param   pwm     PWM 实例指针
  */
 void hw_pwm_disable(hw_pwm_instance_t *pwm);
+
+/**
+ * @brief   关闭功率级。
+ * @note    仅拉低驱动器 SD，不停止 PWM 或 CH4 控制触发。
+ * @param   pwm     PWM 实例指针
+ */
+void hw_pwm_power_stage_disable(hw_pwm_instance_t *pwm);
+
+/**
+ * @brief   关闭三相电机 PWM 和互补输出。
+ * @note    不停止 CH4 控制触发，便于故障后继续采集 ADC。
+ * @param   pwm     PWM 实例指针
+ */
+void hw_pwm_motor_outputs_disable(hw_pwm_instance_t *pwm);
+
+/**
+ * @brief   关闭 CH4 控制触发。
+ * @param   pwm     PWM 实例指针
+ */
+void hw_pwm_control_trigger_disable(hw_pwm_instance_t *pwm);
 
 /**
  * @brief   设置 SD 引脚状态 (驱动器使能/禁用)

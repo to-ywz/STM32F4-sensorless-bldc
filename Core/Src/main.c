@@ -379,7 +379,7 @@ static int debug_power_stage_set(void *user, uint8_t enable)
         return hw_pwm_is_enabled(&hw_pwm) != 0U ? 0 : -1;
     }
 
-    hw_pwm_disable(&hw_pwm);
+    power_stage_disable();
     return hw_pwm_is_enabled(&hw_pwm) == 0U ? 0 : -1;
 }
 
@@ -390,7 +390,8 @@ static int debug_power_stage_set(void *user, uint8_t enable)
 static void power_stage_disable(void)
 {
     open_loop_vf_stop(&vf);
-    hw_pwm_disable(&hw_pwm);
+    hw_pwm_power_stage_disable(&hw_pwm);
+    hw_pwm_motor_outputs_disable(&hw_pwm);
 }
 
 /**
@@ -477,11 +478,6 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     if (hadc->Instance != ADC1)
         return;
 
-    /* 故障锁存后不再执行任何控制计算或 PWM 更新。 */
-    if (motor_fault_is_latched(&motor_fault) != 0U) {
-        return;
-    }
-
     /* 读取三相电流原始值；测量模块会按扇区选择两相并重构第三相。 */
     uint16_t current_u_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
         hadc, ADC_INJECTED_RANK_1);
@@ -489,11 +485,19 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         hadc, ADC_INJECTED_RANK_2);
     uint16_t current_w_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
         hadc, ADC_INJECTED_RANK_3);
+    uint16_t vrefint_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
+        hadc, ADC_INJECTED_RANK_4);
     app_measurement_update_current(&app_measurement,
                                    svpwm.sector,
                                    current_u_raw,
                                    current_v_raw,
                                    current_w_raw);
+    app_measurement_update_vrefint(&app_measurement, vrefint_raw);
+
+    /* 故障锁存后保留 ADC 采集和通信观察，但不再执行控制计算。 */
+    if (motor_fault_is_latched(&motor_fault) != 0U) {
+        return;
+    }
 
     if (app_measurement_check_overcurrent(&app_measurement,
                                           svpwm.sector,
@@ -505,10 +509,6 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         power_stage_disable();
         return;
     }
-    app_measurement_update_vrefint(
-        &app_measurement,
-        (uint16_t)HAL_ADCEx_InjectedGetValue(
-            hadc, ADC_INJECTED_RANK_4));
 
     float dt = 1.0f / (float)PWM_FREQ;     /* 控制周期 62.5μs */
 

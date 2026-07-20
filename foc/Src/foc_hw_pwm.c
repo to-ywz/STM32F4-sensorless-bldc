@@ -183,18 +183,28 @@ void hw_pwm_enable(hw_pwm_instance_t *pwm)
 }
 
 /**
- * @brief   禁用 PWM 输出
+ * @brief   关闭功率级
  */
-void hw_pwm_disable(hw_pwm_instance_t *pwm)
+void hw_pwm_power_stage_disable(hw_pwm_instance_t *pwm)
 {
     if (pwm == NULL) {
         return;
     }
 
-    /* 无论内部状态如何，关闭动作都必须先拉低 SD。 */
+    /* 无论内部状态如何，关闭动作都必须拉低 SD。 */
     HAL_GPIO_WritePin(SD_GPIO_PORT, SD_GPIO_PIN, GPIO_PIN_RESET);
+}
 
-    /* 禁用 TIM1 输出 */
+/**
+ * @brief   关闭三相电机 PWM 和互补输出
+ */
+void hw_pwm_motor_outputs_disable(hw_pwm_instance_t *pwm)
+{
+    if (pwm == NULL) {
+        return;
+    }
+
+    /* 关闭三相主输出。 */
     HAL_TIM_PWM_Stop(pwm->config.htim, TIM_CHANNEL_1);
     HAL_TIM_PWM_Stop(pwm->config.htim, TIM_CHANNEL_2);
     HAL_TIM_PWM_Stop(pwm->config.htim, TIM_CHANNEL_3);
@@ -203,10 +213,33 @@ void hw_pwm_disable(hw_pwm_instance_t *pwm)
     HAL_TIMEx_PWMN_Stop(pwm->config.htim, TIM_CHANNEL_2);
     HAL_TIMEx_PWMN_Stop(pwm->config.htim, TIM_CHANNEL_3);
 
-    /* 禁用 CH4，停止触发 ADC */
-    HAL_TIM_PWM_Stop(pwm->config.htim, TIM_CHANNEL_4);
-
     pwm->enabled = 0;
+}
+
+/**
+ * @brief   关闭 CH4 控制触发
+ */
+void hw_pwm_control_trigger_disable(hw_pwm_instance_t *pwm)
+{
+    if (pwm == NULL) {
+        return;
+    }
+
+    HAL_TIM_PWM_Stop(pwm->config.htim, TIM_CHANNEL_4);
+}
+
+/**
+ * @brief   完全关闭 PWM、互补输出、功率级和 CH4 控制触发
+ */
+void hw_pwm_disable(hw_pwm_instance_t *pwm)
+{
+    if (pwm == NULL) {
+        return;
+    }
+
+    hw_pwm_power_stage_disable(pwm);
+    hw_pwm_motor_outputs_disable(pwm);
+    hw_pwm_control_trigger_disable(pwm);
 }
 
 /**
