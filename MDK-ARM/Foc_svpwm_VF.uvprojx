@@ -724,9 +724,9 @@
               <FilePath>..\foc\Src\foc_math.c</FilePath>
             </File>
             <File>
-              <FileName>foc_current_reconstruct.c</FileName>
+              <FileName>current_three_shunt.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\foc\Src\foc_current_reconstruct.c</FilePath>
+              <FilePath>..\foc\Src\current_three_shunt.c</FilePath>
             </File>
             <File>
               <FileName>open_loop_vf.c</FileName>

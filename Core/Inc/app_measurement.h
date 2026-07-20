@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #include <stdint.h>
-#include "foc_current_reconstruct.h"
+#include "current_three_shunt.h"
 
 /**
  * @brief ADC、电流和电压测量换算配置。
@@ -54,7 +54,7 @@ typedef struct {
     float current_v_adc_v;
     float current_w_adc_v;
     float current_sum_error_a;
-    uint8_t current_sector;
+    uint8_t current_sector_applied;
     uint8_t current_reconstructed;
     float bemf_u_adc_v;
     float bemf_v_adc_v;
@@ -75,7 +75,7 @@ typedef struct {
     volatile uint16_t current_u_raw;
     volatile uint16_t current_v_raw;
     volatile uint16_t current_w_raw;
-    volatile uint8_t current_sector;
+    volatile uint8_t current_sector_applied;
     volatile uint32_t current_calibration_target;
     volatile uint32_t current_calibration_count;
     volatile uint32_t current_calibration_sum_u;
@@ -113,7 +113,7 @@ void app_measurement_update(app_measurement_t *measurement,
  * @brief 更新一次 ADC1 三相电流原始采样值。
  */
 void app_measurement_update_current(app_measurement_t *measurement,
-                                    uint8_t current_sector,
+                                    uint8_t sector_applied,
                                     uint16_t current_u_raw,
                                     uint16_t current_v_raw,
                                     uint16_t current_w_raw);
@@ -134,7 +134,7 @@ void app_measurement_set_overcurrent_enabled(
  */
 uint8_t app_measurement_check_overcurrent(
     app_measurement_t *measurement,
-    uint8_t current_sector,
+    uint8_t sector_applied,
     uint16_t current_u_raw,
     uint16_t current_v_raw,
     uint16_t current_w_raw);

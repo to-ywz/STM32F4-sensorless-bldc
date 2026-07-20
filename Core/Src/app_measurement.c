@@ -26,7 +26,7 @@ int app_measurement_init(app_measurement_t *measurement,
     measurement->current_u_raw = 0U;
     measurement->current_v_raw = 0U;
     measurement->current_w_raw = 0U;
-    measurement->current_sector = 0U;
+    measurement->current_sector_applied = 0U;
     measurement->current_calibration_target = 0U;
     measurement->current_calibration_count = 0U;
     measurement->current_calibration_sum_u = 0U;
@@ -73,7 +73,7 @@ uint8_t app_measurement_is_overcurrent_fault(
 
 uint8_t app_measurement_check_overcurrent(
     app_measurement_t *measurement,
-    uint8_t current_sector,
+    uint8_t sector_applied,
     uint16_t current_u_raw,
     uint16_t current_v_raw,
     uint16_t current_w_raw)
@@ -83,7 +83,7 @@ uint8_t app_measurement_check_overcurrent(
     float current_v_a;
     float current_w_a;
     float current_peak_a;
-    foc_current_result_t current_result;
+    current_three_shunt_result_t current_result;
 
     if (measurement == NULL ||
         measurement->overcurrent_enabled == 0U ||
@@ -117,11 +117,11 @@ uint8_t app_measurement_check_overcurrent(
                    measurement->config.current_amplifier_gain);
 
     /* 保护判断必须使用与 VOFA 相同的扇区重构结果。 */
-    if (foc_current_reconstruct(current_sector,
-                                current_u_a,
-                                current_v_a,
-                                current_w_a,
-                                &current_result) == 0) {
+    if (current_three_shunt_process(sector_applied,
+                                    current_u_a,
+                                    current_v_a,
+                                    current_w_a,
+                                    &current_result) == 0) {
         current_u_a = current_result.current_u_a;
         current_v_a = current_result.current_v_a;
         current_w_a = current_result.current_w_a;
@@ -149,7 +149,7 @@ uint8_t app_measurement_check_overcurrent(
 }
 
 void app_measurement_update_current(app_measurement_t *measurement,
-                                    uint8_t current_sector,
+                                    uint8_t sector_applied,
                                     uint16_t current_u_raw,
                                     uint16_t current_v_raw,
                                     uint16_t current_w_raw)
@@ -162,7 +162,7 @@ void app_measurement_update_current(app_measurement_t *measurement,
     measurement->current_u_raw = current_u_raw;
     measurement->current_v_raw = current_v_raw;
     measurement->current_w_raw = current_w_raw;
-    measurement->current_sector = current_sector;
+    measurement->current_sector_applied = sector_applied;
 
     if (measurement->current_calibration_count <
         measurement->current_calibration_target) {
@@ -260,7 +260,7 @@ int app_measurement_get(const app_measurement_t *measurement,
     uint32_t sequence_end;
     uint16_t vrefint_raw;
     float vdda_v;
-    foc_current_result_t current_result;
+    current_three_shunt_result_t current_result;
 
     if (measurement == NULL || sample == NULL) {
         return -1;
@@ -280,7 +280,7 @@ int app_measurement_get(const app_measurement_t *measurement,
         sample->current_u_raw = measurement->current_u_raw;
         sample->current_v_raw = measurement->current_v_raw;
         sample->current_w_raw = measurement->current_w_raw;
-        sample->current_sector = measurement->current_sector;
+        sample->current_sector_applied = measurement->current_sector_applied;
         sequence_end = measurement->sequence;
 
         if (sequence_start == sequence_end &&
@@ -322,11 +322,11 @@ int app_measurement_get(const app_measurement_t *measurement,
                            measurement->config.current_shunt_ohm *
                            measurement->config.current_amplifier_gain);
 
-    if (foc_current_reconstruct(sample->current_sector,
-                                sample->current_u_a,
-                                sample->current_v_a,
-                                sample->current_w_a,
-                                &current_result) == 0) {
+    if (current_three_shunt_process(sample->current_sector_applied,
+                                    sample->current_u_a,
+                                    sample->current_v_a,
+                                    sample->current_w_a,
+                                    &current_result) == 0) {
         sample->current_u_a = current_result.current_u_a;
         sample->current_v_a = current_result.current_v_a;
         sample->current_w_a = current_result.current_w_a;

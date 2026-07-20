@@ -110,7 +110,7 @@ Ireconstruct = -(IsampleA + IsampleB)
 
 ### 6.4 当前边界
 
-- `foc_current_reconstruct()` 已实现扇区选择和第三相重构；
+- `current_three_shunt_process()` 已实现三电阻采样的扇区选相和第三相计算；
 - 计算在三相 ADC 电压换算和零偏补偿之后进行；
 - `sector=0` 或无效扇区时不执行重构，保留三相直接换算值；
 - 当前没有动态修改 ADC Rank 和触发时序，属于“硬件三路采集、软件两相选用”的第一阶段方案。

@@ -69,7 +69,7 @@ void svpwm_init(svpwm_output_t *svpwm, float v_dc, uint16_t freq, uint16_t perio
 {
     svpwm->v_alpha  = 0.0f;
     svpwm->v_beta   = 0.0f;
-    svpwm->sector   = 0;
+    svpwm->sector_next = 0;
     svpwm->fault    = 0;
 
     svpwm->cfg.v_dc            = v_dc;
@@ -192,15 +192,15 @@ void svpwm_update(svpwm_output_t *svpwm, float v_alpha, float v_beta)
     /* 通过 αβ 符号判断大致扇区 */
     if (v_beta >= 0.0f) {
         if (v_alpha >= 0.0f) {
-            svpwm->sector = (v_beta * 0.5773503f > v_alpha) ? 2 : 1; /* √3/3 ≈ 0.577 */
+            svpwm->sector_next = (v_beta * 0.5773503f > v_alpha) ? 2 : 1; /* √3/3 ≈ 0.577 */
         } else {
-            svpwm->sector = (v_beta * 0.5773503f > -v_alpha) ? 2 : 3;
+            svpwm->sector_next = (v_beta * 0.5773503f > -v_alpha) ? 2 : 3;
         }
     } else {
         if (v_alpha < 0.0f) {
-            svpwm->sector = (-v_beta * 0.5773503f > -v_alpha) ? 5 : 4;
+            svpwm->sector_next = (-v_beta * 0.5773503f > -v_alpha) ? 5 : 4;
         } else {
-            svpwm->sector = (-v_beta * 0.5773503f > v_alpha) ? 5 : 6;
+            svpwm->sector_next = (-v_beta * 0.5773503f > v_alpha) ? 5 : 6;
         }
     }
 }

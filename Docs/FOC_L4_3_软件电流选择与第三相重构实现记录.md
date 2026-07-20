@@ -2,11 +2,11 @@
 
 ## 1. 实现范围
 
-本阶段将已经确认的 SVPWM 占空比排序接入电流测量结果：
+本阶段将已经确认的 SVPWM 占空比排序接入电流测量结果，并明确这是“三电阻采样的扇区选相与第三相计算”，不是单电阻采样重构：
 
 ```text
 每个 PWM 周期读取 ADC 结果
-  -> 根据当前 PWM 扇区选择两相
+  -> 根据 sector_applied 选择两相
   -> 使用 Iu + Iv + Iw = 0 重构第三相
   -> VOFA 和后续控制环使用重构后的三相电流
 ```
@@ -42,8 +42,8 @@
 对应代码位于：
 
 ```text
-foc/Inc/foc_current_reconstruct.h
-foc/Src/foc_current_reconstruct.c
+foc/Inc/current_three_shunt.h
+foc/Src/current_three_shunt.c
 ```
 
 ## 3. 重构方法
@@ -66,10 +66,12 @@ Iw = -(Iu + Iv)
 
 ## 4. 状态处理
 
-- `sector` 为 1~6 时，执行按扇区的两相选择和第三相重构；
-- `sector=0` 或无效值时，不执行重构，保留三相直接换算值；
-- 启动零点校准期间 `svpwm.sector` 为 0，因此不会污染零点校准；
-- 正常 PWM 输出更新后，下一次 ADC 回调使用上一 PWM 周期对应的扇区；
+- `sector_applied` 为 1~6 时，执行按扇区的两相选择和第三相计算；
+- `sector_applied=0` 或无效值时，不执行选相计算，保留三相直接换算值；
+- `sector_next` 表示本次 SVPWM 计算得到、等待写入下一周期 PWM 的扇区；
+- ADC 回调开始时将上一轮 `sector_next` 锁定为本次 `sector_applied`；
+- 停止或故障停机时清零两个扇区状态，重新启动后先经过一个无效扇区周期再建立新时序；
+- 启动零点校准期间扇区为 0，因此不会污染零点校准；
 - `current_sum_error_a` 记录重构后的三相电流和，理论值应接近 0。
 
 ## 5. 当前限制

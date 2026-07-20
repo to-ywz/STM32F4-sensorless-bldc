@@ -106,6 +106,13 @@ static motor_fault_t     motor_fault;     /* 电机控制故障锁存对象 */
 
 static app_measurement_t app_measurement;
 
+typedef struct {
+    uint8_t sector_applied;
+    uint8_t sector_next;
+} pwm_sector_state_t;
+
+static pwm_sector_state_t pwm_sector_state;
+
 static uint8_t debug_uart_rx_dma_buf[DEBUG_UART_RX_DMA_SIZE];
 static uint8_t debug_uart_rx_ring_buf[DEBUG_UART_RX_RING_SIZE];
 static uint8_t debug_uart_tx_ring_buf[DEBUG_UART_TX_RING_SIZE];
@@ -392,6 +399,8 @@ static void power_stage_disable(void)
     open_loop_vf_stop(&vf);
     hw_pwm_power_stage_disable(&hw_pwm);
     hw_pwm_motor_outputs_disable(&hw_pwm);
+    pwm_sector_state.sector_applied = 0U;
+    pwm_sector_state.sector_next = 0U;
 }
 
 /**
@@ -401,7 +410,7 @@ static void raise_control_fault(motor_fault_code_t code)
 {
     motor_fault_context_t context = {
         .svpwm_fault = svpwm.fault,
-        .sector      = svpwm.sector,
+        .sector      = pwm_sector_state.sector_applied,
         .v_alpha     = svpwm.v_alpha,
         .v_beta      = svpwm.v_beta,
         .cmp_a       = svpwm.pwm.cmp_a,
@@ -478,6 +487,9 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     if (hadc->Instance != ADC1)
         return;
 
+    /* 本次 ADC 采样属于上一轮已经写入并生效的 PWM。 */
+    pwm_sector_state.sector_applied = pwm_sector_state.sector_next;
+
     /* 读取三相电流原始值；测量模块会按扇区选择两相并重构第三相。 */
     uint16_t current_u_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
         hadc, ADC_INJECTED_RANK_1);
@@ -488,7 +500,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     uint16_t vrefint_raw = (uint16_t)HAL_ADCEx_InjectedGetValue(
         hadc, ADC_INJECTED_RANK_4);
     app_measurement_update_current(&app_measurement,
-                                   svpwm.sector,
+                                   pwm_sector_state.sector_applied,
                                    current_u_raw,
                                    current_v_raw,
                                    current_w_raw);
@@ -500,7 +512,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     }
 
     if (app_measurement_check_overcurrent(&app_measurement,
-                                          svpwm.sector,
+                                          pwm_sector_state.sector_applied,
                                           current_u_raw,
                                           current_v_raw,
         current_w_raw) != 0U) {
@@ -541,6 +553,9 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         }
 
         hw_pwm_set_duty(&hw_pwm, &svpwm.pwm);
+
+        /* 比较值写入后，当前计算的扇区成为下一次采样对应的扇区。 */
+        pwm_sector_state.sector_next = svpwm.sector_next;
 
         app_debug_on_pwm_update(&app_debug, &svpwm.pwm);
     }

@@ -38,7 +38,7 @@
 │   └── Src/
 │       ├── pid.c
 │       ├── foc_math.c
-│       ├── foc_current_reconstruct.c # 按扇区选择两相并重构第三相
+│       ├── current_three_shunt.c     # 三电阻按扇区选两相并计算第三相
 │       ├── svpwm.c
 │       ├── open_loop_vf.c
 │       └── foc_hw_pwm.c
@@ -259,7 +259,8 @@ stop
 - **高速示波输出卡死**：`VOFA_MODE_SCOPE` 以 16kHz 连续输出 3 通道 JustFloat 时，VOFA+ 会卡死。该模式暂不启用，后续改为分频输出或触发捕获模式。
 - **ADC 参考电压仍需实测复核**：控制板实际 3.3 V 供电约为 3.0 V，软件已经使用 VREFINT 动态计算 VDDA，PF9 与 VBUS 的比例暂保持原理图 `×37`。后续需要将 VOFA 的实时 VDDA 与 MCU 实测 VDDA 对照。详细过程见 [`Docs/FOC_L3_3_ADC测量问题与排查记录.md`](Docs/FOC_L3_3_ADC测量问题与排查记录.md)。
 - **三相电流保护尚未完成**：PA3/PA4/PA6 的 ADC1 电流通道已接入 VOFA+，启动时自动采集 2048 组样本完成三相零点校准，电流钳已完成基础波形对照；过流保护和电流环仍未接入。
-- **三电阻采样当前为软件重构第一阶段**：`foc_current_reconstruct` 已依据已确认的扇区占空比排序选择两相，并使用 `Iu + Iv + Iw = 0` 重构第三相；ADC 目前仍保持三路 Rank 采集，待示波器确认低侧窗口后再优化实际采样时序。
+- **三电阻采样当前为软件选相第一阶段**：`current_three_shunt` 依据已确认的扇区占空比排序选择两相，并使用 `Iu + Iv + Iw = 0` 计算第三相；ADC 目前仍保持三路 Rank 采集，待后续验证低侧窗口后再优化实际采样时序。
+- **采样扇区与输出扇区已分离**：`sector_applied` 表示本次 ADC 采样对应的已生效 PWM 扇区，`sector_next` 表示本次控制计算后等待写入下一周期 PWM 的扇区。
 
 ## 当前任务优先级
 

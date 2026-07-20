@@ -67,14 +67,14 @@ typedef enum {
  * 成员:
  *   v_alpha  - α 轴电压
  *   v_beta   - β 轴电压
- *   sector   - 当前扇区 (1~6, 仅用于调试)
+ *   sector_next - 本次 SVPWM 计算得到、等待写入下一周期 PWM 的扇区
  *   pwm      - PWM 输出
  *   fault    - 故障码: SVPWM_FAULT_NONE 表示本次更新正常
  */
 typedef struct {
     float v_alpha;
     float v_beta;
-    uint8_t sector;
+    uint8_t sector_next;
     pwm_output_t pwm;
     uint8_t fault;
     svpwm_config_t cfg;
