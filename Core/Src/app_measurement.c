@@ -21,6 +21,7 @@ int app_measurement_init(app_measurement_t *measurement,
         return -1;
     }
 
+    // TODO：这里赋值太多了，是否考虑将 直接 = 0，然后只赋值 config，减少代码量和出错概率。
     measurement->config = *config;
     measurement->sequence = 0U;
     measurement->current_u_raw = 0U;

@@ -49,6 +49,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+// TODO: 这些宏定义是否需要放到配置文件中，方便后续的参数调整和维护，或者后期修改为变量，便于在运行时进行调试和优化，减少代码的硬编码，提高系统的灵活性和可配置性。
 #define VDC             12.0f       /* 母线电压 (V) */
 #define PWM_FREQ        16000       /* PWM 频率 (Hz) */
 #define PWM_PERIOD      5249        /* TIM1 ARR 值 */
@@ -104,15 +105,16 @@ static comm_scope_t      debug_scope;     /* 调试示波输出对象 */
 static app_debug_t       app_debug;       /* 应用层调试模板对象 */
 static motor_fault_t     motor_fault;     /* 电机控制故障锁存对象 */
 
-static app_measurement_t app_measurement;
+static app_measurement_t app_measurement;   // TODO: 这个名字太长，是否需要重构较短的，更加简洁
 
 typedef struct {
     uint8_t sector_applied;
     uint8_t sector_next;
-} pwm_sector_state_t;
+} pwm_sector_state_t;   // TODO: 是否为测试代码需要删除
 
-static pwm_sector_state_t pwm_sector_state;
+static pwm_sector_state_t pwm_sector_state; // TODO: 是否为测试代码需要删除
 
+// 是否要将这部分的 DMA buffer 和 ring buffer 放到 comm_uart_stm32_t 结构体中，减少全局变量的使用
 static uint8_t debug_uart_rx_dma_buf[DEBUG_UART_RX_DMA_SIZE];
 static uint8_t debug_uart_rx_ring_buf[DEBUG_UART_RX_RING_SIZE];
 static uint8_t debug_uart_tx_ring_buf[DEBUG_UART_TX_RING_SIZE];
@@ -122,6 +124,7 @@ static uint8_t debug_uart_tx_dma_buf[DEBUG_UART_TX_DMA_SIZE];
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
+// 初始化函数是否需要集成在统一的初始化文件中，减少 main.c 的代码量
 static void debug_comm_init(void);
 static void debug_comm_task(void);
 static int current_zero_calibration(void);
@@ -218,9 +221,9 @@ int main(void)
   HAL_TIM_Base_Start(&htim1);
 
   /* 上电默认关闭功率级；仅由串口 start 命令显式使能。 */
-  hw_pwm_disable(&hw_pwm);
+  hw_pwm_disable(&hw_pwm);  // TODO: 这里直接接触硬件层，理论上应该通过应用层接口来控制功率级的使能和关闭，避免直接操作硬件导致潜在的安全问题。
 
-  /* 启动 ADC 注入转换，TIM1 CC4 触发 */
+  /* 启动 ADC 注入转换，TIM1 CC4 触发 */ // TODO: 这部分是否考虑形成函数，方便后续的 ADC 配置和启动流程的复用
   HAL_ADCEx_InjectedStart_IT(&hadc1);
   HAL_ADCEx_InjectedStart_IT(&hadc3);
 
