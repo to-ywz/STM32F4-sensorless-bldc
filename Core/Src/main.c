@@ -426,15 +426,6 @@ static void raise_control_fault(motor_fault_code_t code)
 }
 
 /**
- * @brief  ADC 注入转换完成回调
- *
- * TIM1 CC4 触发 ADC 注入转换，转换完成后进入此回调。
- * 每个 PWM 周期执行一次控制链路:
- *   open_loop_vf_step → foc_inv_park → svpwm_update → hw_pwm_set_duty
- *
- * @param  hadc : ADC 句柄
- */
-/**
  * @brief 在驱动器关闭时采集三相电流零点。
  *
  * 仅打开 TIM1 CH4 作为 ADC 触发源，不打开三相 PWM 和驱动器 SD。
@@ -467,6 +458,16 @@ static int current_zero_calibration(void)
         &app_measurement);
 }
 
+
+/**
+ * @brief  ADC 注入转换完成回调
+ *
+ * TIM1 CC4 触发 ADC 注入转换，转换完成后进入此回调。
+ * 每个 PWM 周期执行一次控制链路:
+ *   open_loop_vf_step → foc_inv_park → svpwm_update → hw_pwm_set_duty
+ *
+ * @param  hadc : ADC 句柄
+ */
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     if (hadc->Instance == ADC3) {

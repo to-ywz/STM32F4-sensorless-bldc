@@ -267,7 +267,7 @@ int app_measurement_get(const app_measurement_t *measurement,
         return -1;
     }
 
-    for (;;) {
+    for (;;) { // 数据一致性保障
         sequence_start = measurement->sequence;
         if ((sequence_start & 1U) != 0U) {
             continue;

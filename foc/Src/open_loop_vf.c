@@ -25,6 +25,7 @@
 void open_loop_vf_init(open_loop_vf_t *vf, float target_freq, float accel,
                        float vf_ratio, float v_max, float v_min)
 {
+    // TODO：有效性检查，过多赋值为0，导致代码冗余，是否需要优化
     vf->state         = OPEN_LOOP_VF_STATE_STOP;
     vf->freq          = 0.0f;
     vf->target_freq   = target_freq;

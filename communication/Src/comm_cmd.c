@@ -75,6 +75,12 @@ static int comm_cmd_parse_freq(char *arg, float *freq_hz)
     return COMM_CMD_OK;
 }
 
+/**
+ * @brief 命令解析器，执行完整命令行。
+ * 
+ * @param cmd： 命令解析器对象
+ * @return int ： 0 表示成功，负数表示失败。
+ */
 static int comm_cmd_exec_line(comm_cmd_t *cmd)
 {
     char *line;

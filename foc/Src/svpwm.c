@@ -67,6 +67,7 @@ static void svpwm_safe_output(svpwm_output_t *svpwm, svpwm_fault_t fault)
 
 void svpwm_init(svpwm_output_t *svpwm, float v_dc, uint16_t freq, uint16_t period)
 {
+    // TODO: 有效性检查，过多赋值为0，导致代码冗余，是否需要优化
     svpwm->v_alpha  = 0.0f;
     svpwm->v_beta   = 0.0f;
     svpwm->sector_next = 0;
